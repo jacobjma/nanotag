@@ -4,13 +4,17 @@ from traitlets import observe
 from traittypes import Array
 
 
-class GaussianFilterSlider(widgets.FloatSlider):
+class GaussianFilterSlider(widgets.HBox):
     image_in = Array(check_equal=False)
     image_out = Array(check_equal=False)
 
-    def __init__(self, description='Gaussian filter', min=0., max=5, **kwargs):
-        super().__init__(description=description, min=min, max=max, **kwargs)
-        self.observe(self.update_image)
+    def __init__(self, min=0, max=5, **kwargs):
+        self._slider = widgets.FloatSlider(description='Gaussian filter', min=min, max=max)
+
+        super().__init__(children=[self._slider], **kwargs)
+        self._slider.observe(self.update_image)
+
+        self.layout.border = 'solid 1px'
 
     def update_image(self, *args):
         self.image_out = self(self.image_in)
@@ -20,4 +24,4 @@ class GaussianFilterSlider(widgets.FloatSlider):
         self.update_image()
 
     def __call__(self, image):
-        return gaussian_filter(image, sigma=float(self.value))
+        return gaussian_filter(image, sigma=float(self._slider.value))

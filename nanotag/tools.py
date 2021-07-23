@@ -1,6 +1,9 @@
 from abc import abstractmethod, ABC
 
 from bqplot.interacts import BrushSelector, PanZoom
+from ipyevents import Event
+from scipy.spatial import KDTree
+import numpy as np
 
 
 class Tool(ABC):
@@ -8,6 +11,23 @@ class Tool(ABC):
     @abstractmethod
     def activate(self, canvas):
         pass
+
+    @abstractmethod
+    def deactivate(self, canvas):
+        pass
+
+
+class Action(ABC):
+
+    @abstractmethod
+    def activate(self, canvas):
+        pass
+
+
+class ResetView(Action):
+
+    def activate(self, canvas):
+        canvas.reset()
 
 
 class BoxZoomTool(Tool):
@@ -29,7 +49,7 @@ class BoxZoomTool(Tool):
             canvas.y_scale.min = min(selected_y[0], selected_y[1])
             canvas.y_scale.max = max(selected_y[0], selected_y[1])
 
-            canvas._enforce_scale_lock()
+            canvas.adjust_equal_axes()
 
             brush_selector.selected_x = None
             brush_selector.selected_y = None
@@ -46,9 +66,79 @@ class BoxZoomTool(Tool):
 class PanZoomTool(Tool):
 
     def activate(self, canvas):
-        panzoom = PanZoom()
-        panzoom.scales = {'x': [canvas.x_scale], 'y': [canvas.y_scale]}
+        panzoom = PanZoom(scales={'x': [canvas.x_scale], 'y': [canvas.y_scale]})
         canvas.figure.interaction = panzoom
 
     def deactivate(self, canvas):
         canvas.figure.interaction = None
+
+
+class EditPointTags(Tool):
+
+    def __init__(self, key, label=0):
+        self._key = key
+        self._label = label
+        self._event = Event(watched_events=['click'])
+
+        self._x = None
+
+    @property
+    def label(self):
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = value
+
+    def activate(self, canvas):
+        self._event.source = canvas
+
+        def handle_event(event):
+            x, y = canvas.pixel_to_domain(event['offsetX'], event['offsetY'])
+            tags = canvas.tags[self._key]
+
+            if event['altKey'] is True:
+                positions = np.array([tags.x, tags.y]).T
+                distances, indices = KDTree(positions).query([[x, y]])
+                tags.delete_tags(indices)
+            else:
+                tags.add_tags([x], [y], [self._label])
+
+        self._event.on_dom_event(handle_event)
+
+    def deactivate(self, canvas):
+        self._event.reset_callbacks()
+
+
+class DeletePointTag(Tool):
+
+    def __init__(self, point_tags, label=0):
+        self._point_tags = point_tags
+        self._label = label
+        self._event = Event(watched_events=['click'])
+
+    @property
+    def label(self):
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = value
+
+    def activate(self, canvas):
+        self._event.source = canvas
+
+        def handle_event(event):
+            x, y = canvas.pixel_to_domain(event['offsetX'], event['offsetY'])
+
+            if event['shiftKey'] is True:
+                positions = np.array([self._point_tags.x, self._point_tags.y]).T
+                indices, distances = KDTree(positions).query([[x, y]])
+                self._point_tags.delete_tags(indices)
+            else:
+                self._point_tags.add_tags([x], [y], [self._label])
+
+        self._event.on_dom_event(handle_event)
+
+    def deactivate(self, canvas):
+        self._event.reset_callbacks()

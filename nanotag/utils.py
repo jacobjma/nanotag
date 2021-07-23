@@ -1,8 +1,10 @@
 import contextlib
 import warnings
 
+import matplotlib.colors
+import matplotlib.cm
 import numpy as np
-from traitlets import TraitError, Undefined, Bool
+from traitlets import TraitError, Undefined
 from traitlets.traitlets import _validate_link
 from traittypes import SciType, Empty
 
@@ -120,3 +122,27 @@ class Array(SciType):
             return self.default_value
         else:
             return np.copy(self.default_value)
+
+
+def get_colors_from_cmap(c, cmap=None, vmin=None, vmax=None):
+    if cmap is None:
+        cmap = matplotlib.cm.get_cmap('viridis')
+
+    elif isinstance(cmap, str):
+        cmap = matplotlib.cm.get_cmap(cmap)
+
+    if vmin is None:
+        vmin = np.nanmin(c)
+
+    if vmax is None:
+        vmax = np.nanmax(c)
+
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+
+    c = np.array(c, dtype=float)
+
+    valid = np.isnan(c) == 0
+    colors = np.zeros((len(c), 4))
+    colors[valid] = cmap(norm(c[valid]))
+
+    return colors
