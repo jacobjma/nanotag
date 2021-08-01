@@ -5,10 +5,10 @@ import os
 import ipywidgets as widgets
 import numpy as np
 from skimage.io import imread
-from traitlets import List, Unicode, Int, observe, Dict, Callable, default, Instance, directional_link
+from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool
 from traittypes import Array
 
-from nanotag.tags import tags_from_serialized
+from nanotag.layout import VBox
 from nanotag.utils import link
 
 
@@ -53,35 +53,94 @@ class IntSliderWithButtons(widgets.HBox):
         self._slider.value -= 1
 
 
-class RootDir(widgets.VBox):
-    root_dir = Unicode()
+class Text(widgets.Text):
 
-    def __init__(self, **kwargs):
-        self._root_dir_text = widgets.Text(description='Root dir.')
-        super().__init__(children=[self._root_dir_text], **kwargs)
-        self.layout.border = 'solid 1px'
-        link((self, 'root_dir'), (self._root_dir_text, 'value'))
+    def __init__(self, *args, **kwargs):
+        super().__init__(style={'description_width': '144px'}, *args, **kwargs)
+        self.layout.width = '452px'
 
 
-class ImageFileCollection(widgets.VBox):
-    root_dir = Unicode()
+class NanotagData(VBox):
+    root_directory = Unicode()
+    read_file = Unicode()
+    write_file = Unicode()
+    identifier = Unicode(allow_none=True)
+
+    def __init__(self, tags, data=None, **kwargs):
+        self._root_directory_text = Text(description='Root directory')
+
+        self._read_file_text = widgets.Text()
+        self._read_file_button = widgets.Button(description='Read data')
+
+        self._write_file_text = widgets.Text()
+        self._write_file_button = widgets.Button(description='Write data')
+
+        link((self, 'root_directory'), (self._root_directory_text, 'value'))
+        link((self, 'write_file'), (self._write_file_text, 'value'))
+        link((self, 'read_file'), (self._read_file_text, 'value'))
+
+        self._read_file_button.on_click(lambda *args: self.read_data())
+        self._write_file_button.on_click(lambda *args: self.write_data())
+
+        if data is None:
+            self._data = {}
+
+        self._tags = tags
+
+        super().__init__(children=[self._root_directory_text,
+                                   widgets.HBox([self._read_file_button, self._read_file_text]),
+                                   widgets.HBox([self._write_file_button, self._write_file_text]),
+                                   ], **kwargs)
+
+    def retrieve_tags(self, identifier):
+
+        for key, tags in self._tags.items():
+            if tags.empty:
+                continue
+
+            if not identifier in self._data.keys():
+                self._data[identifier] = {}
+
+            self._data[identifier][key] = tags.serialize()
+
+    def send_tags(self, identifier):
+        for tags in self._tags.values():
+            tags.reset()
+
+        if identifier in self._data.keys():
+            for key, data in self._data[identifier].items():
+                self._tags[key].from_serialized(data)
+
+    @observe('identifier')
+    def _observe_identifier(self, change):
+        self.retrieve_tags(change['old'])
+        self.send_tags(change['new'])
+
+    def write_data(self):
+        self.retrieve_tags(self.identifier)
+        with open(os.path.join(self.root_directory, self._write_file_text.value), 'w') as f:
+            json.dump(self._data, f)
+
+    def read_data(self):
+        with open(os.path.join(self.root_directory, self._read_file_text.value), 'r') as f:
+            self._data = json.load(f)
+        self.send_tags(self.identifier)
+
+
+class ImageFileCollection(VBox):
+    root_directory = Unicode()
     filter = Unicode()
 
     file_index = Int(0)
     paths = List()
     path = Unicode(allow_none=True)
-
-    frame_index = Int(0)
     relative_path = Unicode(allow_none=True)
 
     images = Array(check_equal=False)
-    image = Array(check_equal=False)
-
     num_frames = Int(0)
 
     def __init__(self, **kwargs):
-
-        self._filters_text = widgets.Text(description='Filter')
+        self._filters_text = Text(description='Filter')
         self._file_select = widgets.Dropdown(options=[], layout=widgets.Layout(width='max-content'))
         self._find_button = widgets.Button(description='Find files')
         self._previous_button = widgets.Button(description='Previous file')
@@ -93,8 +152,6 @@ class ImageFileCollection(widgets.VBox):
                           widgets.HBox([self._previous_button, self._next_button])
                           ], **kwargs)
 
-        self.layout.border = 'solid 1px'
-
         link((self, 'filter'), (self._filters_text, 'value'))
         link((self, 'paths'), (self._file_select, 'options'))
         link((self._file_select, 'value'), (self, 'path'))
@@ -104,15 +161,11 @@ class ImageFileCollection(widgets.VBox):
         self._next_button.on_click(lambda *args: self.next_file())
 
     def _load_paths(self):
-        self.paths = glob.glob(os.path.join(self.root_dir, self._filters_text.value))
+        self.paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value))
 
     @default('images')
     def _default_images(self):
         return np.zeros((0, 0, 0))
-
-    @default('image')
-    def _default_image(self):
-        return np.zeros((0, 0))
 
     @observe('path')
     def _observe_path(self, *args):
@@ -127,25 +180,9 @@ class ImageFileCollection(widgets.VBox):
         assert len(images.shape) == 3
 
         self.images = images
-        self.relative_path = os.path.relpath(self.path, self.root_dir)
-
-        if self.frame_index == 0:
-            self._set_image()
-        else:
-            self.frame_index = 0
-
         self.num_frames = len(images)
 
-    def _set_image(self):
-
-        if self.images is None:
-            return
-
-        self.image = self.images[self.frame_index]
-
-    @observe('frame_index')
-    def _observe_current_frame_index(self, change):
-        self._set_image()
+        self.relative_path = os.path.relpath(self.path, self.root_directory)
 
     def _current_file_index(self):
         try:
@@ -172,170 +209,47 @@ class ImageFileCollection(widgets.VBox):
         self._file_select.value = self._file_select.options[(i - 1) % self.num_files]
 
 
-class NanotagData(widgets.VBox):
-    root_dir = Unicode()
-
+class Summary(VBox):
+    key = Unicode()
     data = Dict()
-    data_item = Dict()
-
-    default_tags = Callable()
-
-    identifier = Unicode()
-
-    tags = List()
-
-    frame_index = Int(0)
-    frame_tags = Dict()
-
+    append_key = Unicode()
+    append = Bool()
     write_file = Unicode()
-    read_file = Unicode()
 
-    frame_summaries = Dict()
+    def __init__(self, update_func, **kwargs):
+        update_button = widgets.Button(description='Update')
+        write_button = widgets.Button(description='Write')
+        file_text = widgets.Text()
+        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='604px'))
 
-    def __init__(self, **kwargs):
-        self._read_file_text = widgets.Text()
-        self._read_file_button = widgets.Button(description='Read')
+        update_button.on_click(lambda *args: self._update())
+        write_button.on_click(lambda *args: self._write())
 
-        self._write_file_text = widgets.Text()
-        self._write_file_button = widgets.Button(description='Write')
-
-        super().__init__(children=[widgets.HBox([self._read_file_button, self._read_file_text]),
-                                   widgets.HBox([self._write_file_button, self._write_file_text]),
-                                   ], **kwargs)
-
-        self.layout.border = 'solid 1px'
-
-        link((self, 'write_file'), (self._write_file_text, 'value'))
-        link((self, 'read_file'), (self._read_file_text, 'value'))
-
-        self._write_file_button.on_click(lambda *args: self.write_data())
-        self._read_file_button.on_click(lambda *args: self.read_data())
-
-    def serialize(self):
-        serialized = {}
-        for identifier, data in self.data.items():
-            serialized[identifier] = {}
-            for key, values in data.items():
-
-                if key == 'tags':
-                    values = [{key: value.serialize() for key, value in frame_tags.items()} for frame_tags in values]
-
-                serialized[identifier][key] = values
-        return serialized
-
-    def from_serialized(self, serialized):
-
-        loaded_data = {}
-        for identifier, data in serialized.items():
-            loaded_data[identifier] = {}
-            for key, values in data.items():
-
-                if key == 'tags':
-                    values = [{key: tags_from_serialized(tags) for key, tags in frame.items()} for frame in values]
-
-                loaded_data[identifier][key] = values
-
-        return loaded_data
-
-    def write_data(self):
-        with open(os.path.join(self.root_dir, self._write_file_text.value), 'w') as f:
-            json.dump(self.serialize(), f)
-
-    def read_data(self):
-        with open(os.path.join(self.root_dir, self._read_file_text.value), 'r') as f:
-            self.data = self.from_serialized(json.load(f))
-
-    @observe('data')
-    def _observe_data(self, change):
-        self._set_data_item()
-
-    def _set_frame_tags(self):
-        if len(self.tags) <= self.frame_index:
-            self.tags = self.tags + [self.default_tags() for _ in range(self.frame_index - len(self.tags) + 1)]
-            self.data[self.identifier]['tags'] = self.tags
-            # {'name': 'tags', 'old': [], 'new': [{'points': < nanotag.tags.PointTags object at
-            #                                    0x14eb59460 >}], 'owner': TagSummaries(), 'type': 'change'}
-            # self.notify_change({'name':'tags', 'new':self.tags, 'type':'change'})
-
-        self.frame_tags = self.tags[self.frame_index]
-
-    @observe('frame_index')
-    def _observe_frame_index(self, change):
-        self._set_frame_tags()
-
-    def _set_data_item(self):
-        if not self.identifier in self.data.keys():
-            self.data[self.identifier] = {'tags': []}
-
-        self.data_item = self.data[self.identifier]
-
-    def _set_tags(self):
-        self.tags = self.data_item['tags']
-
-        if self.frame_index == 0:
-            self._set_frame_tags()
-        else:
-            self.frame_index = 0
-
-    @observe('data_item')
-    def _observe_data_item(self, change):
-        self._set_tags()
-
-    @observe('identifier')
-    def _observe_identifier(self, change):
-        self._set_data_item()
-
-
-class NanotagDataSummaries(widgets.VBox):
-    data = Dict()
-
-    frame_summary_funcs = Dict()
-    summary_func = Callable()
-
-    frame_summaries = Dict()
-    summary = Dict()
-
-    def __init__(self, **kwargs):
-        self._update_button = widgets.Button(description='Update summaries')
-        self._write_summary_button = widgets.Button(description='Write summary')
-        self._summary_text_area = widgets.Textarea(
-            description='Summary:',
-            layout=widgets.Layout(width='600px')
-        )
-
-        super().__init__(children=[widgets.HBox([self._update_button, self._write_summary_button]),
-                                   self._summary_text_area], **kwargs)
-
+        super().__init__(children=[self._summary_text, widgets.HBox([update_button, write_button, file_text])],
+                         **kwargs)
 
         def summary_transform(summary):
             return str(summary)
 
-        directional_link((self, 'summary'), (self._summary_text_area, 'value'), transform=summary_transform)
+        directional_link((self, 'data'), (self._summary_text, 'value'), transform=summary_transform)
+        link((self, 'write_file'), (file_text, 'value'))
 
-        self._update_button.on_click(lambda *args: self.update())
-        self._write_summary_button.on_click(lambda *args: self.write_summary())
-        self.layout.border = 'solid 1px'
+        self._update_func = update_func
 
-    def write_summary(self):
-        pass
+    def _update(self):
+        self.data = self._update_func()
 
-    def update(self):
-        self._update_frame_summaries()
-        self._update_summary()
+    def _write(self):
+        if self.append:
+            try:
+                with open(self.write_file, 'r') as f:
+                    data = json.load(f)
+            except FileNotFoundError:
+                data = {}
+        else:
+            data = {}
 
-    def _update_summary(self):
-        self.summary = self.summary_func(self.data, self.frame_summaries)
+        data[self.append_key] = self.data
 
-    def _update_frame_summaries(self):
-        if len(self.data) == 0:
-            return
-
-        frame_summaries = {key: [] for key in self.frame_summary_funcs.keys()}
-        for key, summary_func in self.frame_summary_funcs.items():
-            frame_summaries[key] = summary_func(self.data)
-
-        self.frame_summaries = frame_summaries
-
-    @observe('data')
-    def _observe_tags(self, change):
-        self._update_frame_summaries()
+        with open(self.write_file, 'w') as f:
+            json.dump(data, f)

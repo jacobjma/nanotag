@@ -1,17 +1,10 @@
 bqplot
 bqplot-image-gl
-matplotlib
-tqdm
-docutils
-readme-renderer
-twine
 scipy
 numpy
 traitlets
 traittypes
 ipywidgets
 jupyter
-shapely
 scikit-image
-numba
 voila

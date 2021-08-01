@@ -25,7 +25,6 @@ class PointArtist(HasTraits):
             artist_link.unlink()
 
         self._artist_links = []
-
         # self._artist_links.append(link((self, 'visible'), (self.mark, 'visible')))
         self._artist_links.append(link((self.tags, 'x'), (self.mark, 'x'), check_broken=False))
         self._artist_links.append(link((self.tags, 'y'), (self.mark, 'y'), check_broken=False))

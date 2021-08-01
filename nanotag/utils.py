@@ -1,12 +1,24 @@
 import contextlib
 import warnings
 
-import matplotlib.colors
 import matplotlib.cm
+import matplotlib.colors
 import numpy as np
 from traitlets import TraitError, Undefined
 from traitlets.traitlets import _validate_link
 from traittypes import SciType, Empty
+
+
+def label_to_index_generator(labels):
+    labels = labels.flatten()
+    labels_order = labels.argsort()
+    sorted_labels = labels[labels_order]
+    indices = np.arange(0, len(labels) + 1)[labels_order]
+    index = np.arange(0, np.max(labels) + 1)
+    lo = np.searchsorted(sorted_labels, index, side='left')
+    hi = np.searchsorted(sorted_labels, index, side='right')
+    for i, (l, h) in enumerate(zip(lo, hi)):
+        yield indices[l:h]
 
 
 class link(object):
@@ -108,7 +120,7 @@ class Array(SciType):
         if not np.array_equal(old_value, new_value):
             obj._notify_trait(self.name, old_value, new_value)
 
-    def __init__(self, default_value=Empty, allow_none=False, dtype=None, check_equal=True, **kwargs):
+    def __init__(self, default_value=Empty, allow_none=False, dtype=None, check_equal=False, **kwargs):
         self.dtype = dtype
         if default_value is Empty:
             default_value = np.array(0, dtype=self.dtype)

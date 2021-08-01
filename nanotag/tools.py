@@ -75,12 +75,10 @@ class PanZoomTool(Tool):
 
 class EditPointTags(Tool):
 
-    def __init__(self, key, label=0):
-        self._key = key
+    def __init__(self, tags, label=0):
+        self._tags = tags
         self._label = label
         self._event = Event(watched_events=['click'])
-
-        self._x = None
 
     @property
     def label(self):
@@ -95,7 +93,7 @@ class EditPointTags(Tool):
 
         def handle_event(event):
             x, y = canvas.pixel_to_domain(event['offsetX'], event['offsetY'])
-            tags = canvas.tags[self._key]
+            tags = self._tags
 
             if event['altKey'] is True:
                 positions = np.array([tags.x, tags.y]).T
@@ -103,40 +101,6 @@ class EditPointTags(Tool):
                 tags.delete_tags(indices)
             else:
                 tags.add_tags([x], [y], [self._label])
-
-        self._event.on_dom_event(handle_event)
-
-    def deactivate(self, canvas):
-        self._event.reset_callbacks()
-
-
-class DeletePointTag(Tool):
-
-    def __init__(self, point_tags, label=0):
-        self._point_tags = point_tags
-        self._label = label
-        self._event = Event(watched_events=['click'])
-
-    @property
-    def label(self):
-        return self._label
-
-    @label.setter
-    def label(self, value):
-        self._label = value
-
-    def activate(self, canvas):
-        self._event.source = canvas
-
-        def handle_event(event):
-            x, y = canvas.pixel_to_domain(event['offsetX'], event['offsetY'])
-
-            if event['shiftKey'] is True:
-                positions = np.array([self._point_tags.x, self._point_tags.y]).T
-                indices, distances = KDTree(positions).query([[x, y]])
-                self._point_tags.delete_tags(indices)
-            else:
-                self._point_tags.add_tags([x], [y], [self._label])
 
         self._event.on_dom_event(handle_event)
 
