@@ -33,8 +33,6 @@ class PointTags(VBox):
 
         link((self, 'x'), (self._mark, 'x'), check_broken=False)
         link((self, 'y'), (self._mark, 'y'), check_broken=False)
-
-        # link((self, 'labels'), (self._mark, 'color'), check_broken=False)
         link((self, 'visible'), (self._mark, 'visible'), check_broken=False)
 
         if data_fields is not None:
@@ -93,14 +91,29 @@ class PointTags(VBox):
                 setattr(self, data_field, data)
 
     def delete_tags(self, indices):
+
+        if (len(self.x) - len(indices)) == 0:
+            self.x = np.zeros((0,))
+            self.y = np.zeros((0,))
+            for data_field in self._data_fields:
+                setattr(self, data_field, np.zeros((0,)))
+
+            return
+
         self.x = np.delete(self.x, indices)
         self.y = np.delete(self.y, indices)
-        self.labels = np.delete(self.labels, indices)
+
+        for data_field in self._data_fields:
+            data = np.delete(getattr(self, data_field), indices)
+            setattr(self, data_field, data)
 
     def reset(self):
-        self.x = np.zeros((0,))
-        self.y = np.zeros((0,))
-        self.labels = np.zeros((0,), dtype=np.int64)
+        with self.hold_trait_notifications():
+            self.x = np.zeros((0,))
+            self.y = np.zeros((0,))
+
+            for data_field in self._data_fields:
+                setattr(self, data_field, np.zeros((0,)))
 
     def set_scales(self, scales):
         scales.update({'color': self.color_scale})
@@ -112,14 +125,15 @@ class PointTags(VBox):
         return serialized
 
     def from_serialized(self, serialized):
-        self.x = serialized['x']
-        self.y = serialized['y']
+        with self.hold_trait_notifications():
+            self.x = serialized['x']
+            self.y = serialized['y']
 
-        for data_field in self._data_fields:
-            try:
-                setattr(self, data_field, serialized[data_field])
-            except KeyError:
-                pass
+            for data_field in self._data_fields:
+                try:
+                    setattr(self, data_field, serialized[data_field])
+                except KeyError:
+                    pass
 
 
 class PointTagSeries(widgets.VBox):
@@ -161,7 +175,7 @@ class PointTagSeries(widgets.VBox):
     def empty_entry(self, index):
         if not index in self.series.keys():
             return True
-
+        #print([value for value in self.series[index].values()])
         return not any([len(value) for value in self.series[index].values()])
 
     @default('point_tags')
@@ -170,7 +184,7 @@ class PointTagSeries(widgets.VBox):
 
     @default('series')
     def _default_series(self):
-        new_entry = lambda: {'x': np.zeros((0,)), 'y': np.zeros((0,)), 'labels': np.zeros((0,), dtype=np.int64)}
+        new_entry = lambda: {'x': np.zeros((0,)), 'y': np.zeros((0,))}
         return defaultdict(new_entry)
 
     @observe('index')
@@ -179,9 +193,8 @@ class PointTagSeries(widgets.VBox):
         self.update_current(change['new'])
 
     def update_series(self, index):
-        if self.point_tags.empty:
-            return
-
+        # if self.point_tags.empty:
+        #    return
         self.series[index] = self.point_tags.serialize()
 
     def update_current(self, index):
@@ -193,9 +206,11 @@ class PointTagSeries(widgets.VBox):
 
     def add_tags(self, x, y, data_fields=None):
         self.point_tags.add_tags(x, y, data_fields)
+        self.update_series(self.index)
 
     def delete_tags(self, indices):
         self.point_tags.delete_tags(indices)
+        self.update_series(self.index)
 
     def set_scales(self, scales):
         self.point_tags.set_scales(scales)
@@ -206,17 +221,17 @@ class PointTagSeries(widgets.VBox):
 
     def serialize(self):
         self.update_series(self.index)
-        #serialized = {}
-        #for index in self.series.keys():
+        # serialized = {}
+        # for index in self.series.keys():
         #    serialized[index] = {key: value for key, value in self.series[index].items()}
         return self.series
 
     def from_serialized(self, serialized):
-        self.index = 0
+        #self.index = 0
 
         series = {}
         for index, entry in serialized.items():
             series[int(index)] = {key: np.array(value) for key, value in entry.items()}
 
         self.series = series
-        self.update_current(0)
+        self.update_current(self.index)

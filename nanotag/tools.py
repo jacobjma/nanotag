@@ -75,9 +75,13 @@ class PanZoomTool(Tool):
 
 class EditPointTags(Tool):
 
-    def __init__(self, tags, label=0):
+    def __init__(self, tags, data_fields=None):
         self._tags = tags
-        self._label = label
+
+        if data_fields is None:
+            data_fields = {}
+
+        self._data_fields = data_fields
         self._event = Event(watched_events=['click'])
 
     @property
@@ -100,7 +104,7 @@ class EditPointTags(Tool):
                 distances, indices = KDTree(positions).query([[x, y]])
                 tags.delete_tags(indices)
             else:
-                tags.add_tags([x], [y], [self._label])
+                tags.add_tags([x], [y], {key: [value] for key, value in self._data_fields.items()})
 
         self._event.on_dom_event(handle_event)
 

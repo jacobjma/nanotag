@@ -15,6 +15,10 @@ def prioritized_greedy_two_coloring(adjacency, priority):
     while queue:
         _, node = queue.pop(0)
         neighbors = np.array(adjacency[node])
+
+        if len(neighbors) == 0:
+            continue
+
         neighbors = neighbors[labels[neighbors] == -1]
         labels[neighbors] = labels[node] == 0
 
@@ -39,5 +43,7 @@ def adjacency_segments(adjacency, points):
 def assign_sublattice(adjacency, points, lattice_constant):
     segments = adjacency_segments(adjacency, points)
     template = np.vstack(([[0., 0.]], regular_polygon(3))) * lattice_constant
+
     rmsd = rmsd_qcp(template, segments)
+
     return prioritized_greedy_two_coloring(adjacency, rmsd)

@@ -161,7 +161,7 @@ class ProbeSuperposition(nn.Module):
             losses *= weights
         return losses.sum()
 
-    def optimize(self, target, optimizers, num_iter, weights=None):
+    def optimize(self, target, optimizers, num_iter, weights=None, pbar=True):
 
         if weights is not None:
             assert target.shape == weights.shape
@@ -169,7 +169,7 @@ class ProbeSuperposition(nn.Module):
 
         target = torch.tensor(target, device=self.positions.device)
 
-        pbar = tqdm(total=num_iter)
+        pbar = tqdm(total=num_iter, disable=not pbar)
         for i in range(num_iter):
             loss = self.get_loss(target, weights)
 

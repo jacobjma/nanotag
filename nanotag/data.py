@@ -65,6 +65,7 @@ class NanotagData(VBox):
     read_file = Unicode()
     write_file = Unicode()
     identifier = Unicode(allow_none=True)
+    selected_data = Dict()
 
     def __init__(self, tags, data=None, **kwargs):
         self._root_directory_text = Text(description='Root directory')
@@ -108,13 +109,22 @@ class NanotagData(VBox):
             tags.reset()
 
         if identifier in self._data.keys():
+
             for key, data in self._data[identifier].items():
+                if not key in self._tags.keys():
+                    continue
+
                 self._tags[key].from_serialized(data)
 
     @observe('identifier')
     def _observe_identifier(self, change):
         self.retrieve_tags(change['old'])
         self.send_tags(change['new'])
+
+        try:
+            self.selected_data = self._data[change['new']]
+        except KeyError:
+            pass
 
     def write_data(self):
         self.retrieve_tags(self.identifier)
@@ -125,6 +135,11 @@ class NanotagData(VBox):
         with open(os.path.join(self.root_directory, self._read_file_text.value), 'r') as f:
             self._data = json.load(f)
         self.send_tags(self.identifier)
+
+        try:
+            self.selected_data = self._data[self.identifier]
+        except KeyError:
+            pass
 
 
 class ImageFileCollection(VBox):
@@ -167,12 +182,19 @@ class ImageFileCollection(VBox):
     def _default_images(self):
         return np.zeros((0, 0, 0))
 
+    @observe('filter')
+    def _change_data(self, *args):
+        self._load_paths()
+
     @observe('path')
     def _observe_path(self, *args):
         if self.path is None:
             return
 
-        images = imread(self.path)
+        try:
+            images = imread(self.path)
+        except ValueError:
+            images = np.zeros((0, 0, 0))
 
         if len(images.shape) == 2:
             images = images[None]
@@ -213,28 +235,33 @@ class Summary(VBox):
     key = Unicode()
     data = Dict()
     append_key = Unicode()
-    append = Bool()
+    append = Bool(True)
     write_file = Unicode()
 
     def __init__(self, update_func, **kwargs):
         update_button = widgets.Button(description='Update')
         write_button = widgets.Button(description='Write')
         file_text = widgets.Text()
-        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='604px'))
+        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='500px', height='300px'))
 
         update_button.on_click(lambda *args: self._update())
         write_button.on_click(lambda *args: self._write())
 
-        super().__init__(children=[self._summary_text, widgets.HBox([update_button, write_button, file_text])],
+        super().__init__(children=[self._summary_text, widgets.HBox([widgets.VBox([update_button, write_button]),
+                                                                     file_text])],
                          **kwargs)
 
         def summary_transform(summary):
-            return str(summary)
+            return json.dumps(summary, indent=4)
 
         directional_link((self, 'data'), (self._summary_text, 'value'), transform=summary_transform)
         link((self, 'write_file'), (file_text, 'value'))
 
         self._update_func = update_func
+
+    @observe('append_key')
+    def _observe_key(self, change):
+        self._update()
 
     def _update(self):
         self.data = self._update_func()
@@ -249,7 +276,7 @@ class Summary(VBox):
         else:
             data = {}
 
-        data[self.append_key] = self.data
+        data[self.append_key] = json.loads(self._summary_text.value)
 
         with open(self.write_file, 'w') as f:
             json.dump(data, f)

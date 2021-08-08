@@ -4,7 +4,7 @@ from ipyevents import Event
 
 class KeyEvents:
 
-    def __init__(self, source   ):
+    def __init__(self, source):
         self._event = Event(source=source, watched_events=['keydown'])
         self._event.on_dom_event(self._handle_event)
         self._callbacks = None
@@ -51,7 +51,6 @@ class ClickEvents:
 
     def reset_callbacks(self):
         self._event.reset_callbacks()
-
 
 # h = widgets.HTML('Event info')
 # def handle_event(event):

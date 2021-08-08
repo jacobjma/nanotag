@@ -35,39 +35,39 @@ class EditTimelineTags(HasTraits):
 
 class TimelineTags(HasTraits):
     t = Array(np.zeros((0,)), check_equal=False)
+    data_overlay = Unicode()
     color_scale = Instance(ColorScale)
-    labels = Array(np.zeros((0,)), check_equal=False)
 
-    def __init__(self, row, default_t=None, **kwargs):
+    def __init__(self, row, data_fields, **kwargs):
         self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)))
         self._mark.enable_move = True
         self._mark.restrict_x = True
         self._row = row
 
-        if default_t is None:
-            default_t = np.zeros((0,))
+        # if default_t is None:
+        #    default_t = np.zeros((0,))
 
-        self._default_t = default_t
+        # self._default_t = default_t
+
+        self._data_fields = data_fields
 
         super().__init__(**kwargs)
-        link((self, 'labels'), (self._mark, 'color'), check_broken=False)
+
+        if data_fields is not None:
+            self.add_traits(**{data_field: Array(np.zeros((0,))) for data_field in data_fields})
+            self.observe(lambda *args: self._set_color(), tuple(data_fields) + ('data_overlay',))
+            self.data_overlay = data_fields[0]
+
+        # link((self, 'labels'), (self._mark, 'color'), check_broken=False)
         link((self, 't'), (self._mark, 'x'), check_broken=False)
 
     @property
     def empty(self):
-        return not any((len(self.t), len(self.labels)))
+        return len(self.t) == 0
 
     @default('color_scale')
     def _default_color_scale(self):
         return ColorScale()
-
-    @validate('t')
-    def _validate_t(self, proposal):
-        return proposal['value'].astype(np.int64)
-
-    @observe('t')
-    def _observe_t(self, change):
-        self._mark.y = [self._row] * len(change['new'])
 
     @property
     def mark(self):
@@ -77,9 +77,16 @@ class TimelineTags(HasTraits):
         scales.update({'color': self.color_scale})
         self._mark.scales = scales
 
+    @observe('t')
+    def _observe_t(self, change):
+        self._mark.y = [self._row] * len(change['new'])
+
+    def _set_color(self):
+        self._mark.color = getattr(self, self.data_overlay)
+
     def reset(self):
-        self.t = self._default_t
-        self.labels = np.zeros((0,), dtype=np.int64)
+        for data_field in self._data_fields:
+            setattr(self, data_field, np.zeros((0,)))
 
     def add_tags(self, t, labels):
         self.t = np.concatenate((self.t, t))
@@ -90,12 +97,26 @@ class TimelineTags(HasTraits):
         self.labels = np.delete(self.labels, indices)
 
     def serialize(self):
-        return {'name': self._row, 't': self.t.tolist(), 'labels': self.labels.tolist()}
+        serialized = {}
+
+        for data_field in self._data_fields:
+            data = getattr(self, data_field)
+            serialized = {i: {} for i in range(len(data))}
+            for i, value in enumerate(data):
+                serialized[i][data_field] = value
+
+        return serialized
+        # return {'t': self.t.tolist()}
 
     def from_serialized(self, serialized):
-        self._row = serialized['name']
-        self.t = serialized['t']
-        self.labels = serialized['labels']
+        for data_field in self._data_fields:
+            data = [serialized[frame_index][data_field] for frame_index in serialized.keys()]
+            setattr(self, data_field, data)
+
+        self.t = np.array([int(key) for key in serialized.keys()])
+
+        # self.t = serialized['t']
+        # self.labels = serialized['labels']
 
 
 class Timeline(widgets.VBox):

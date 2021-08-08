@@ -28,7 +28,10 @@ def rmsd_qcp(src, dst):
     valid = [len(segment) == n for segment in dst]
 
     dst = np.array([segment for i, segment in enumerate(dst) if valid[i]])
-    N = max(src.shape[0], dst.shape[0])
+    N = dst.shape[0] #max(src.shape[0], dst.shape[0])
+
+    if len(dst) == 0:
+        return rmsd
 
     M = np.matmul(np.swapaxes(dst, 1, 2), src)
 
