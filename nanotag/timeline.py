@@ -38,9 +38,9 @@ class TimelineTags(HasTraits):
     data_overlay = Unicode()
     color_scale = Instance(ColorScale)
 
-    def __init__(self, row, data_fields, **kwargs):
+    def __init__(self, row, data_fields, enable_move=True, **kwargs):
         self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)))
-        self._mark.enable_move = True
+        self._mark.enable_move = enable_move
         self._mark.restrict_x = True
         self._row = row
 

@@ -156,7 +156,7 @@ class ImageFileCollection(VBox):
 
     def __init__(self, **kwargs):
         self._filters_text = Text(description='Filter')
-        self._file_select = widgets.Dropdown(options=[], layout=widgets.Layout(width='max-content'))
+        self._file_select = widgets.Dropdown(options=[], layout=widgets.Layout(width='300px'))
         self._find_button = widgets.Button(description='Find files')
         self._previous_button = widgets.Button(description='Previous file')
         self._next_button = widgets.Button(description='Next file')
@@ -236,19 +236,20 @@ class Summary(VBox):
     data = Dict()
     append_key = Unicode()
     append = Bool(True)
+    path = Unicode()
     write_file = Unicode()
 
     def __init__(self, update_func, **kwargs):
         update_button = widgets.Button(description='Update')
         write_button = widgets.Button(description='Write')
         file_text = widgets.Text()
-        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='500px', height='300px'))
+        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='300px'))
 
         update_button.on_click(lambda *args: self._update())
         write_button.on_click(lambda *args: self._write())
 
-        super().__init__(children=[self._summary_text, widgets.HBox([widgets.VBox([update_button, write_button]),
-                                                                     file_text])],
+        super().__init__(children=[self._summary_text, widgets.VBox([update_button,
+                                                                     widgets.HBox([write_button, file_text])])],
                          **kwargs)
 
         def summary_transform(summary):
@@ -278,5 +279,5 @@ class Summary(VBox):
 
         data[self.append_key] = json.loads(self._summary_text.value)
 
-        with open(self.write_file, 'w') as f:
+        with open(os.path.join(self.path, self.write_file), 'w') as f:
             json.dump(data, f)

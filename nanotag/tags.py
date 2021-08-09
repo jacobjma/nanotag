@@ -7,7 +7,7 @@ from traitlets import Bool, Int, observe, default, Dict, Unicode
 
 from nanotag.layout import VBox
 from nanotag.utils import Array, link
-
+from bqplot.colorschemes import CATEGORY10
 
 class PointTags(VBox):
     x = Array(np.zeros((0,)), check_equal=False)
@@ -18,13 +18,17 @@ class PointTags(VBox):
     visible = Bool(True)
 
     def __init__(self, data_fields=None, **kwargs):
-        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)), scales={'color': ColorScale()})
+        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)), scales={'color': ColorScale(scheme='plasma')})
         self._mark.enable_move = True
 
         self._data_overlay_dropdown = widgets.Dropdown(description='Overlay', options=data_fields)
-        self._color_scheme_dropdown = widgets.Dropdown(description='Colors', options=['viridis',
-                                                                                      'plasma',
-                                                                                      'inferno', 'magma'])
+        self._color_scheme_dropdown = widgets.Dropdown(description='Colors', options=[
+            'category',
+            'viridis',
+            'plasma',
+            'inferno',
+            'magma'])
+
         self._visible_checkbox = widgets.Checkbox(description='Visible')
 
         super().__init__(children=[self._data_overlay_dropdown,
@@ -45,7 +49,15 @@ class PointTags(VBox):
         link((self, 'visible'), (self._visible_checkbox, 'value'))
         link((self, 'data_overlay'), (self._data_overlay_dropdown, 'value'))
         link((self, 'color_scheme'), (self._color_scheme_dropdown, 'value'))
-        link((self, 'color_scheme'), (self.color_scale, 'scheme'))
+
+    @observe('color_scheme')
+    def _observe_color_scheme(self, change):
+        if change['new'] == 'category':
+            self.color_scale.colors = CATEGORY10
+            self.color_scale.scheme = ''
+        else:
+            self.color_scale.colors = []
+            self.color_scale.scheme = change['new']
 
     @property
     def empty(self):
@@ -59,11 +71,11 @@ class PointTags(VBox):
     def color_scale(self):
         return self._mark.scales['color']
 
-    @observe('color_scale')
-    def _observe_color_scale(self, change):
-        scales = {key: scale for key, scale in self._mark.scales.items()}
-        scales.update({'color': change['new']})
-        self._mark.scales = scales
+    # @observe('color_scale')
+    # def _observe_color_scale(self, change):
+    #     scales = {key: scale for key, scale in self._mark.scales.items()}
+    #     scales.update({'color': change['new']})
+    #     self._mark.scales = scales
 
     def _set_color(self):
         self._mark.color = getattr(self, self.data_overlay)
@@ -175,7 +187,7 @@ class PointTagSeries(widgets.VBox):
     def empty_entry(self, index):
         if not index in self.series.keys():
             return True
-        #print([value for value in self.series[index].values()])
+        # print([value for value in self.series[index].values()])
         return not any([len(value) for value in self.series[index].values()])
 
     @default('point_tags')
@@ -227,7 +239,7 @@ class PointTagSeries(widgets.VBox):
         return self.series
 
     def from_serialized(self, serialized):
-        #self.index = 0
+        # self.index = 0
 
         series = {}
         for index, entry in serialized.items():
