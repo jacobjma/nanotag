@@ -5,6 +5,7 @@ numpy
 traitlets
 traittypes
 ipywidgets
+ipyevents
 jupyter
 scikit-image
 voila
