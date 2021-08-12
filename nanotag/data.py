@@ -5,11 +5,11 @@ import os
 import ipywidgets as widgets
 import numpy as np
 from skimage.io import imread
-from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool
+from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool, validate
 from traittypes import Array
 
 from nanotag.layout import VBox
-from nanotag.utils import link
+from nanotag.utils import link, md5_digest
 
 
 def walk_dir(path, ending):
@@ -148,7 +148,11 @@ class ImageFileCollection(VBox):
 
     file_index = Int(0)
     paths = List()
-    path = Unicode(allow_none=True)
+    path = Unicode('')
+
+    # hashes = List()
+    hash = Unicode(allow_none=True)
+
     relative_path = Unicode(allow_none=True)
 
     images = Array(check_equal=False)
@@ -156,7 +160,7 @@ class ImageFileCollection(VBox):
 
     def __init__(self, **kwargs):
         self._filters_text = Text(description='Filter')
-        self._file_select = widgets.Dropdown(options=[], layout=widgets.Layout(width='300px'))
+        self._file_select = widgets.Dropdown(options=[''], layout=widgets.Layout(width='300px'), value='')
         self._find_button = widgets.Button(description='Find files')
         self._previous_button = widgets.Button(description='Previous file')
         self._next_button = widgets.Button(description='Next file')
@@ -168,7 +172,7 @@ class ImageFileCollection(VBox):
                           ], **kwargs)
 
         link((self, 'filter'), (self._filters_text, 'value'))
-        link((self, 'paths'), (self._file_select, 'options'))
+        link((self._file_select, 'options'), (self, 'paths'))
         link((self._file_select, 'value'), (self, 'path'))
 
         self._find_button.on_click(lambda x: self._load_paths())
@@ -176,7 +180,8 @@ class ImageFileCollection(VBox):
         self._next_button.on_click(lambda *args: self.next_file())
 
     def _load_paths(self):
-        self.paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value))
+        self.paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value))[:5]
+        self.hashes = [md5_digest(path) for path in self.paths]
 
     @default('images')
     def _default_images(self):
@@ -185,6 +190,14 @@ class ImageFileCollection(VBox):
     @observe('filter')
     def _change_data(self, *args):
         self._load_paths()
+
+    @validate('path')
+    def _validate_path(self, proposal):
+
+        if proposal['value'] is None:
+            return ''
+
+        return proposal['value']
 
     @observe('path')
     def _observe_path(self, *args):
@@ -205,6 +218,8 @@ class ImageFileCollection(VBox):
         self.num_frames = len(images)
 
         self.relative_path = os.path.relpath(self.path, self.root_directory)
+
+        self.hash = md5_digest(self.path)
 
     def _current_file_index(self):
         try:
@@ -233,30 +248,45 @@ class ImageFileCollection(VBox):
 
 class Summary(VBox):
     key = Unicode()
+
+    current_data = Dict()
     data = Dict()
-    append_key = Unicode()
-    append = Bool(True)
+
+    current_path = Unicode()
     path = Unicode()
-    write_file = Unicode()
+
+    current_write_file = Unicode(allow_none=True)
+    write_file = Unicode(allow_none=True)
 
     def __init__(self, update_func, **kwargs):
         update_button = widgets.Button(description='Update')
+
+        write_current_button = widgets.Button(description='Write current')
         write_button = widgets.Button(description='Write')
+
+        current_file_text = widgets.Text()
         file_text = widgets.Text()
-        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='300px'))
+
+        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='400px'))
 
         update_button.on_click(lambda *args: self._update())
-        write_button.on_click(lambda *args: self._write())
+        write_current_button.on_click(lambda *args: self._write_current_data())
+        write_button.on_click(lambda *args: self._write_data())
 
-        super().__init__(children=[self._summary_text, widgets.VBox([update_button,
-                                                                     widgets.HBox([write_button, file_text])])],
+        super().__init__(children=[self._summary_text,
+                                   widgets.VBox([update_button,
+                                                 widgets.HBox([write_current_button, current_file_text]),
+                                                 widgets.HBox([write_button, file_text])
+                                                 ])],
                          **kwargs)
 
         def summary_transform(summary):
             return json.dumps(summary, indent=4)
 
-        directional_link((self, 'data'), (self._summary_text, 'value'), transform=summary_transform)
+        directional_link((self, 'current_data'), (self._summary_text, 'value'), transform=summary_transform)
+
         link((self, 'write_file'), (file_text, 'value'))
+        link((self, 'current_write_file'), (current_file_text, 'value'))
 
         self._update_func = update_func
 
@@ -265,19 +295,12 @@ class Summary(VBox):
         self._update()
 
     def _update(self):
-        self.data = self._update_func()
+        self.current_data, self.data = self._update_func()
 
-    def _write(self):
-        if self.append:
-            try:
-                with open(self.write_file, 'r') as f:
-                    data = json.load(f)
-            except FileNotFoundError:
-                data = {}
-        else:
-            data = {}
+    def _write_current_data(self):
+        with open(os.path.join(self.current_path, self.current_write_file), 'w') as f:
+            json.dump(self.current_data, f)
 
-        data[self.append_key] = json.loads(self._summary_text.value)
-
+    def _write_data(self):
         with open(os.path.join(self.path, self.write_file), 'w') as f:
-            json.dump(data, f)
+            json.dump(self.data, f)

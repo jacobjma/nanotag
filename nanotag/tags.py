@@ -2,12 +2,13 @@ from collections import defaultdict
 
 import ipywidgets as widgets
 import numpy as np
-from bqplot import Scatter, ColorScale
+from bqplot import Scatter, ColorScale, LinearScale
 from traitlets import Bool, Int, observe, default, Dict, Unicode
 
 from nanotag.layout import VBox
 from nanotag.utils import Array, link
 from bqplot.colorschemes import CATEGORY10
+
 
 class PointTags(VBox):
     x = Array(np.zeros((0,)), check_equal=False)
@@ -18,7 +19,10 @@ class PointTags(VBox):
     visible = Bool(True)
 
     def __init__(self, data_fields=None, **kwargs):
-        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)), scales={'color': ColorScale(scheme='plasma')})
+        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)),
+                             scales=
+                             {'color': ColorScale(scheme='plasma'),
+                              'opacity': LinearScale(min=0, max=1)})
         self._mark.enable_move = True
 
         self._data_overlay_dropdown = widgets.Dropdown(description='Overlay', options=data_fields)
@@ -71,6 +75,10 @@ class PointTags(VBox):
     def color_scale(self):
         return self._mark.scales['color']
 
+    @property
+    def opacity_scale(self):
+        return self._mark.scales['opacity']
+
     # @observe('color_scale')
     # def _observe_color_scale(self, change):
     #     scales = {key: scale for key, scale in self._mark.scales.items()}
@@ -81,7 +89,8 @@ class PointTags(VBox):
         self._mark.color = getattr(self, self.data_overlay)
 
     def add_to_canvas(self, canvas):
-        self._mark.scales = {'x': canvas.x_scale, 'y': canvas.y_scale, 'color': self.color_scale}
+        self._mark.scales = {'x': canvas.x_scale, 'y': canvas.y_scale, 'color': self.color_scale,
+                             'opacity': self.opacity_scale}
         if not self.mark in canvas.figure.marks:
             canvas.figure.marks = [self.mark] + canvas.marks
 
@@ -128,7 +137,7 @@ class PointTags(VBox):
                 setattr(self, data_field, np.zeros((0,)))
 
     def set_scales(self, scales):
-        scales.update({'color': self.color_scale})
+        scales.update({'color': self.color_scale, 'opacity': self.opacity_scale})
         self._mark.scales = scales
 
     def serialize(self):

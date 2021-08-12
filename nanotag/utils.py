@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import warnings
 
 import matplotlib.cm
@@ -7,6 +8,19 @@ import numpy as np
 from traitlets import TraitError, Undefined
 from traitlets.traitlets import _validate_link
 from traittypes import SciType, Empty
+
+
+def md5_digest(file, buf_size=6553610):
+    md5 = hashlib.md5()
+
+    with open(file, 'rb') as f:
+        while True:
+            data = f.read(buf_size)
+            if not data:
+                break
+            md5.update(data)
+
+    return md5.hexdigest()
 
 
 def label_to_index_generator(labels):
