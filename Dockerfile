@@ -1,9 +1,11 @@
-FROM python:3.8-slim-buster
+FROM python:3.8.0
 
 RUN mkdir /src
 WORKDIR /src
 
 COPY . /src
+
+RUN pip3 install --upgrade setuptools
 RUN pip3 install -r requirements.txt
 
 RUN pip3 install .
