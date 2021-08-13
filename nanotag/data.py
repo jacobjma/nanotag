@@ -259,7 +259,7 @@ class Summary(VBox):
     write_file = Unicode(allow_none=True)
 
     def __init__(self, update_func, **kwargs):
-        update_button = widgets.Button(description='Update')
+        self._update_button = widgets.Button(description='Update')
 
         write_current_button = widgets.Button(description='Write current')
         write_button = widgets.Button(description='Write')
@@ -269,12 +269,12 @@ class Summary(VBox):
 
         self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='400px'))
 
-        update_button.on_click(lambda *args: self._update())
+        #update_button.on_click(lambda *args: self._update())
         write_current_button.on_click(lambda *args: self._write_current_data())
         write_button.on_click(lambda *args: self._write_data())
 
         super().__init__(children=[self._summary_text,
-                                   widgets.VBox([update_button,
+                                   widgets.VBox([self._update_button,
                                                  widgets.HBox([write_current_button, current_file_text]),
                                                  widgets.HBox([write_button, file_text])
                                                  ])],
@@ -289,10 +289,6 @@ class Summary(VBox):
         link((self, 'current_write_file'), (current_file_text, 'value'))
 
         self._update_func = update_func
-
-    @observe('append_key')
-    def _observe_key(self, change):
-        self._update()
 
     def _update(self):
         self.current_data, self.data = self._update_func()
