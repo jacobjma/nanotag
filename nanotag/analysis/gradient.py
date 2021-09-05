@@ -75,28 +75,56 @@ class InterpolatedModel(nn.Module):
         return Interp1d()(self.nodes, self.values, x)
 
 
-class FixPositions:
+class AbstractConstraint:
+
+    def __init__(self, apply_to):
+        self._apply_to = apply_to
+
+    @property
+    def apply_to(self):
+        return self._apply_to
+
+
+class FixPositions(AbstractConstraint):
 
     def __init__(self, mask):
         self._mask = mask
+        super().__init__(apply_to='gradients')
 
     def apply(self, model):
         model.positions.grad[self._mask] = 0.
 
 
-class FixIntensities:
+class BoundPositions(AbstractConstraint):
+
+    def __init__(self, centers, bound):
+        self._centers = centers
+        self._bound = bound
+        super().__init__(apply_to='parameters')
+
+    def apply(self, model):
+        with torch.no_grad():
+            vec = model.positions - self._centers
+            d = torch.norm(vec, dim=1)
+            norm_vec = vec / d[:, None]
+            model.positions[:] = self._centers + norm_vec * d[:, None].clamp(0, self._bound)
+
+
+class FixIntensities(AbstractConstraint):
 
     def __init__(self, mask):
         self._mask = mask
+        super().__init__(apply_to='gradients')
 
     def apply(self, model):
         model.intensities.grad[self._mask] = 0.
 
 
-class CoupleIntensities:
+class CoupleIntensities(AbstractConstraint):
 
     def __init__(self, labels):
         self._labels = labels
+        super().__init__(apply_to='gradients')
 
     def apply(self, model):
         for indices in label_to_index_generator(self._labels):
@@ -127,8 +155,7 @@ class ProbeSuperposition(nn.Module):
         ky = np.fft.fftfreq(shape[0] + 2 * self.margin)
         self.k = torch.tensor(np.sqrt(kx[None] ** 2 + ky[:, None] ** 2), dtype=torch.float32)
 
-    def forward(self):
-
+    def get_image(self, remove_margin=True):
         shape = (self.shape[0] + 2 * self.margin, self.shape[1] + 2 * self.margin)
 
         array = torch.zeros(shape, device=self.positions.device)
@@ -142,7 +169,6 @@ class ProbeSuperposition(nn.Module):
 
         rows = torch.clip(rows, 0, array.shape[0] - 1)
         cols = torch.clip(cols, 0, array.shape[1] - 1)
-
         array[rows, cols] += (1 - (positions[:, 1] - rows)) * (1 - (positions[:, 0] - cols)) * self.intensities
         array[(rows + 1) % shape[0], cols] += (positions[:, 1] - rows) * (
                 1 - (positions[:, 0] - cols)) * self.intensities
@@ -152,9 +178,18 @@ class ProbeSuperposition(nn.Module):
                 cols - positions[:, 0]) * self.intensities
 
         array = torch.fft.ifftn(torch.fft.fftn(array, dim=(-2, -1)) * self.probe_model(self.k), dim=(-2, -1))
-        return array.real[self.margin:-self.margin, self.margin:-self.margin]
+
+        if remove_margin:
+            return array.real[self.margin:-self.margin, self.margin:-self.margin]
+        else:
+            return array.real
+
+    def forward(self):
+        return self.get_image()
 
     def get_loss(self, target, weights=None):
+        target = torch.tensor(target, device=self.positions.device)
+
         prediction = self()
         losses = ((prediction - target) ** 2)
         if weights is not None:
@@ -179,12 +214,22 @@ class ProbeSuperposition(nn.Module):
             loss.backward()
 
             for contraint in self.constraints:
+                if contraint.apply_to != 'gradients':
+                    continue
+
                 contraint.apply(self)
 
             for optimizer in optimizers:
                 optimizer.step()
 
+            for contraint in self.constraints:
+                if contraint.apply_to != 'parameters':
+                    continue
+
+                contraint.apply(self)
+
             pbar.update(1)
             pbar.set_postfix({'loss': loss.detach().item()})
 
         pbar.close()
+        return loss
