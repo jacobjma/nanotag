@@ -24,6 +24,9 @@ def md5_digest(file, buf_size=6553610):
 
 
 def label_to_index_generator(labels):
+    if len(labels) == 0:
+        return []
+
     labels = labels.flatten()
     labels_order = labels.argsort()
     sorted_labels = labels[labels_order]
@@ -38,7 +41,7 @@ def label_to_index_generator(labels):
 class link(object):
     updating = False
 
-    def __init__(self, source, target, transform=None, check_broken=True):
+    def __init__(self, source, target, transform=None, check_broken=False):
         _validate_link(source, target)
         self.source, self.target = source, target
         self._transform, self._transform_inv = (

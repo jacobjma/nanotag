@@ -18,12 +18,12 @@ class PointTags(VBox):
     color_scheme = Unicode('plasma')
     visible = Bool(True)
 
-    def __init__(self, data_fields=None, **kwargs):
+    def __init__(self, data_fields=None, enable_move=True, **kwargs):
         self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)),
                              scales=
                              {'color': ColorScale(scheme='plasma'),
                               'opacity': LinearScale(min=0, max=1)})
-        self._mark.enable_move = True
+        self._mark.enable_move = enable_move
 
         self._data_overlay_dropdown = widgets.Dropdown(description='Overlay', options=data_fields)
         self._color_scheme_dropdown = widgets.Dropdown(description='Colors', options=[
@@ -158,13 +158,13 @@ class PointTags(VBox):
 
 
 class PointTagSeries(widgets.VBox):
-    index = Int(0)
+    frame_index = Int(0)
     series = Dict()
     color_scheme = Unicode('plasma')
 
-    def __init__(self, data_fields=None, **kwargs):
+    def __init__(self, data_fields=None, enable_move=True, **kwargs):
 
-        self._point_tags = PointTags(data_fields=data_fields)
+        self._point_tags = PointTags(data_fields=data_fields, enable_move=enable_move)
 
         super().__init__(children=[self._point_tags], **kwargs)
 
@@ -191,13 +191,13 @@ class PointTagSeries(widgets.VBox):
         if not self.point_tags.empty:
             return False
 
-        return all([self.empty_entry(index) for index in self.series.keys()])
+        return all([self.empty_entry(frame_index) for frame_index in self.series.keys()])
 
-    def empty_entry(self, index):
-        if not index in self.series.keys():
+    def empty_entry(self, frame_index):
+        if not frame_index in self.series.keys():
             return True
         # print([value for value in self.series[index].values()])
-        return not any([len(value) for value in self.series[index].values()])
+        return not any([len(value) for value in self.series[frame_index].values()])
 
     @default('point_tags')
     def _default_point_tags(self):
@@ -205,33 +205,37 @@ class PointTagSeries(widgets.VBox):
 
     @default('series')
     def _default_series(self):
-        new_entry = lambda: {'x': np.zeros((0,)), 'y': np.zeros((0,))}
+        new_entry = lambda: {'x': [], 'y': []}
         return defaultdict(new_entry)
 
-    @observe('index')
-    def _observe_index(self, change):
+    @observe('frame_index')
+    def _observe_frame_index(self, change):
         self.update_series(change['old'])
         self.update_current(change['new'])
 
-    def update_series(self, index):
+    @observe('series')
+    def _observe_series(self, change):
+        self.update_current(self.frame_index)
+
+    def update_series(self, frame_index):
         # if self.point_tags.empty:
         #    return
-        self.series[index] = self.point_tags.serialize()
+        self.series[frame_index] = self.point_tags.serialize()
 
-    def update_current(self, index):
-        if self.empty_entry(index):
+    def update_current(self, frame_index):
+        if self.empty_entry(frame_index):
             self.point_tags.reset()
             return
 
-        self.point_tags.from_serialized(self.series[index])
+        self.point_tags.from_serialized(self.series[frame_index])
 
     def add_tags(self, x, y, data_fields=None):
         self.point_tags.add_tags(x, y, data_fields)
-        self.update_series(self.index)
+        self.update_series(self.frame_index)
 
     def delete_tags(self, indices):
         self.point_tags.delete_tags(indices)
-        self.update_series(self.index)
+        self.update_series(self.frame_index)
 
     def set_scales(self, scales):
         self.point_tags.set_scales(scales)
@@ -241,7 +245,7 @@ class PointTagSeries(widgets.VBox):
         self.point_tags.reset()
 
     def serialize(self):
-        self.update_series(self.index)
+        self.update_series(self.frame_index)
         # serialized = {}
         # for index in self.series.keys():
         #    serialized[index] = {key: value for key, value in self.series[index].items()}
@@ -251,8 +255,8 @@ class PointTagSeries(widgets.VBox):
         # self.index = 0
 
         series = {}
-        for index, entry in serialized.items():
-            series[int(index)] = {key: np.array(value) for key, value in entry.items()}
+        for frame_index, entry in serialized.items():
+            series[int(frame_index)] = {key: value for key, value in entry.items()}
 
         self.series = series
-        self.update_current(self.index)
+        self.update_current(self.frame_index)

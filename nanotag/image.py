@@ -24,8 +24,8 @@ class GaussianFilterSlider(VBox):
 
 
 class ImageSeries(VBox):
-    length = Int(0)
-    index = Int(0)
+    num_frames = Int(0)
+    frame_index = Int(0)
     sampling = Float(1.)
     color_scheme = Unicode('grey')
 
@@ -93,13 +93,13 @@ class ImageSeries(VBox):
         return self.mark.scales['image']
 
     def _update_image(self):
-        image = self.images[self.index]
+        image = self.images[min(self.frame_index, len(self.images) - 1)]
         for filt in self.filters:
             image = filt(image)
         self.image = image
 
-    @observe('index')
-    def _observe_index(self, change):
+    @observe('frame_index')
+    def _observe_frame_index(self, change):
         self._update_image()
 
     @observe('color_scheme')
@@ -133,12 +133,12 @@ class ImageSeries(VBox):
         if len(self.images) == 0:
             return
 
-        self.length = len(change['new'])
+        self.num_frames = len(change['new'])
 
-        if self.index == 0:
-            self._update_image()
-        else:
-            self.index = 0
+        # if self.frame_index == 0:
+        self._update_image()
+        # else:
+        #    self.frame_index = 0
 
         self.x_scale.min = self.x_limits[0]
         self.x_scale.max = self.x_limits[1]

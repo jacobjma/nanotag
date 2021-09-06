@@ -113,7 +113,11 @@ class BoundPositions(AbstractConstraint):
 class FixIntensities(AbstractConstraint):
 
     def __init__(self, mask):
-        self._mask = mask
+        try:
+            self._mask = np.concatenate(mask)
+        except ValueError:
+            self._mask = mask
+
         super().__init__(apply_to='gradients')
 
     def apply(self, model):
@@ -122,13 +126,23 @@ class FixIntensities(AbstractConstraint):
 
 class CoupleIntensities(AbstractConstraint):
 
-    def __init__(self, labels):
+    def __init__(self, labels, per_image=True):
         self._labels = labels
+        self._per_image = per_image
         super().__init__(apply_to='gradients')
 
     def apply(self, model):
-        for indices in label_to_index_generator(self._labels):
-            model.intensities.grad[indices] = model.intensities.grad[indices].mean()
+        if self._per_image:
+            i = 0
+            for l in self._labels:
+                for indices in label_to_index_generator(l):
+                    indices = np.sort(indices + i)
+                    model.intensities.grad[indices] = model.intensities.grad[indices].mean()
+                i = i + len(l)
+        else:
+            for indices in label_to_index_generator(self._labels):
+                indices = np.sort(indices)
+                model.intensities.grad[indices] = model.intensities.grad[indices].mean()
 
 
 class ProbeSuperposition(nn.Module):
@@ -136,13 +150,25 @@ class ProbeSuperposition(nn.Module):
     def __init__(self, shape, probe_model, positions, intensities=None, margin=0, constraints=None):
         super().__init__()
 
+        if isinstance(positions, list):
+            self.image_label = np.hstack([[i] * len(p) for i, p in enumerate(positions)])
+            positions = np.vstack(positions)
+        else:
+            self.image_label = np.zeros(len(positions), dtype=np.int)
+
         if intensities is None:
             intensities = np.ones(len(positions))
 
+        if isinstance(intensities, list):
+            intensities = np.concatenate(intensities)
+
+        assert len(positions) == len(self.image_label)
         assert len(intensities) == len(positions)
         self.probe_model = probe_model
+
         self.positions = torch.nn.Parameter(data=torch.tensor(positions, dtype=torch.float32), requires_grad=True)
         self.intensities = torch.nn.Parameter(data=torch.tensor(intensities, dtype=torch.float32), requires_grad=True)
+
         self.shape = shape
         self.margin = margin
 
@@ -151,12 +177,12 @@ class ProbeSuperposition(nn.Module):
 
         self.constraints = constraints
 
-        kx = np.fft.fftfreq(shape[1] + 2 * self.margin)
-        ky = np.fft.fftfreq(shape[0] + 2 * self.margin)
+        kx = np.fft.fftfreq(shape[-2] + 2 * self.margin)
+        ky = np.fft.fftfreq(shape[-1] + 2 * self.margin)
         self.k = torch.tensor(np.sqrt(kx[None] ** 2 + ky[:, None] ** 2), dtype=torch.float32)
 
-    def get_image(self, remove_margin=True):
-        shape = (self.shape[0] + 2 * self.margin, self.shape[1] + 2 * self.margin)
+    def _get_images(self, remove_margin=True):
+        shape = (self.shape[0], self.shape[1] + 2 * self.margin, self.shape[2] + 2 * self.margin)
 
         array = torch.zeros(shape, device=self.positions.device)
         self.k = self.k.to(self.positions.device)
@@ -167,34 +193,53 @@ class ProbeSuperposition(nn.Module):
         rounded = torch.floor(positions).type(torch.long)
         rows, cols = rounded[:, 1], rounded[:, 0]
 
-        rows = torch.clip(rows, 0, array.shape[0] - 1)
-        cols = torch.clip(cols, 0, array.shape[1] - 1)
-        array[rows, cols] += (1 - (positions[:, 1] - rows)) * (1 - (positions[:, 0] - cols)) * self.intensities
-        array[(rows + 1) % shape[0], cols] += (positions[:, 1] - rows) * (
-                1 - (positions[:, 0] - cols)) * self.intensities
-        array[rows, (cols + 1) % shape[1]] += (1 - (positions[:, 1] - rows)) * (
-                positions[:, 0] - cols) * self.intensities
-        array[(rows + 1) % shape[0], (cols + 1) % shape[1]] += (rows - positions[:, 1]) * (
-                cols - positions[:, 0]) * self.intensities
+        rows = torch.clip(rows, 0, array.shape[-2] - 1)
+        cols = torch.clip(cols, 0, array.shape[-1] - 1)
+
+        a = (1 - (positions[:, 1] - rows)) * (1 - (positions[:, 0] - cols)) * self.intensities
+        b = (positions[:, 1] - rows) * (1 - (positions[:, 0] - cols)) * self.intensities
+        c = (1 - (positions[:, 1] - rows)) * (positions[:, 0] - cols) * self.intensities
+        d = (rows - positions[:, 1]) * (cols - positions[:, 0]) * self.intensities
+
+        array[self.image_label, rows, cols] += a
+        array[self.image_label, (rows + 1) % shape[-2], cols] += b
+        array[self.image_label, rows, (cols + 1) % shape[-1]] += c
+        array[self.image_label, (rows + 1) % shape[-2], (cols + 1) % shape[-1]] += d
 
         array = torch.fft.ifftn(torch.fft.fftn(array, dim=(-2, -1)) * self.probe_model(self.k), dim=(-2, -1))
-
+        #return array[:, self.margin:-self.margin, self.margin:-self.margin]
         if remove_margin:
-            return array.real[self.margin:-self.margin, self.margin:-self.margin]
+            return array.real[:, self.margin:-self.margin, self.margin:-self.margin]
         else:
             return array.real
 
     def forward(self):
-        return self.get_image()
+        return self._get_images()
 
     def get_loss(self, target, weights=None):
-        target = torch.tensor(target, device=self.positions.device)
-
-        prediction = self()
+        assert target.shape == self.shape
+        prediction = self._get_images()
         losses = ((prediction - target) ** 2)
         if weights is not None:
             losses *= weights
-        return losses.sum()
+        return losses.sum(axis=(-2, -1))
+
+    def get_positions(self):
+        positions = self.positions.detach().cpu().numpy()
+        positions_list = []
+        for i in label_to_index_generator(self.image_label):
+            positions_list.append(positions[np.sort(i)])
+        return positions_list
+
+    def get_intensities(self):
+        intensities = self.intensities.detach().cpu().numpy()
+        intensities_list = []
+        for i in label_to_index_generator(self.image_label):
+            intensities_list.append(intensities[np.sort(i)])
+        return intensities_list
+
+    def get_images(self, remove_margin=True):
+        return self._get_images(remove_margin=remove_margin).detach().cpu().numpy()
 
     def optimize(self, target, optimizers, num_iter, weights=None, pbar=True):
 
@@ -207,11 +252,12 @@ class ProbeSuperposition(nn.Module):
         pbar = tqdm(total=num_iter, disable=not pbar)
         for i in range(num_iter):
             loss = self.get_loss(target, weights)
+            sum_loss = loss.sum()
 
             for optimizer in optimizers:
                 optimizer.zero_grad()
 
-            loss.backward()
+            sum_loss.backward()
 
             for contraint in self.constraints:
                 if contraint.apply_to != 'gradients':
@@ -229,7 +275,7 @@ class ProbeSuperposition(nn.Module):
                 contraint.apply(self)
 
             pbar.update(1)
-            pbar.set_postfix({'loss': loss.detach().item()})
+            pbar.set_postfix({'loss': sum_loss.detach().item()})
 
         pbar.close()
         return loss

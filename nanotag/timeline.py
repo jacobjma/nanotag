@@ -39,7 +39,7 @@ class TimelineTags(HasTraits):
     color_scale = Instance(ColorScale)
 
     def __init__(self, row, data_fields, enable_move=True, **kwargs):
-        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)))
+        self._mark = Scatter(x=np.zeros((0,)), y=np.zeros((0,)), marker='rectangle')
         self._mark.enable_move = enable_move
         self._mark.restrict_x = True
         self._row = row
@@ -139,7 +139,7 @@ class Timeline(widgets.VBox):
 
         self._figure = Figure(scales=scales, axes=[x_axis, y_axis], fig_margin=fig_margin)
 
-        self._figure.layout.height = f'{50 + (10 * 1)}px'
+        self._figure.layout.height = f'{50 + (20 * 1)}px'
         self._figure.layout.width = f'{width}px'
 
         linear_y_scale = LinearScale(allow_padding=False)
@@ -225,7 +225,7 @@ class Timeline(widgets.VBox):
             tags.set_scales({'x': self.x_scale, 'y': self.y_scale})
 
         self.y_scale.domain = [tags._row for tags in change['new']]
-        self.figure.marks = [self._index_indicator] + [tags.mark for tags in change['new']]
+        self.figure.marks = [tags.mark for tags in change['new']] + [self._index_indicator]
 
     @observe('data')
     def _observe_data(self, change):

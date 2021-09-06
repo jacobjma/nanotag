@@ -9,14 +9,14 @@ from bqplot import Hist, Bars
 
 
 class Histogram(widgets.HBox):
-    lower = Float(0.)
+
     adjust_x_scale = Bool(True)
     min = Float(0.)
     max = Float(1.)
     bins = Int(10)
     sample = Array(np.zeros((0,)), check_equal=False)
 
-    def __init__(self, fig_margin=None, label=None, width=450, height=450, **kwargs):
+    def __init__(self, markers=None, fig_margin=None, label=None, width=450, height=450, **kwargs):
         x_scale = LinearScale(allow_padding=False)
         y_scale = LinearScale(allow_padding=False)
 
@@ -49,19 +49,24 @@ class Histogram(widgets.HBox):
 
         super().__init__(children=[self._figure], **kwargs)
 
+        if markers is not None:
+            self.add_traits(**{marker: Float(0.) for marker in markers})
+            self.observe(lambda *args: self._observe_markers(), tuple(markers))
+
+        self._markers = markers
+
         event = Event(source=self._figure, watched_events=['mousemove', 'mousedown'])
         event.on_dom_event(self._handle_event)
 
         linear_y_scale = LinearScale(allow_padding=False)
-        self._index_indicator = Lines(x=[0, 0], y=[0, 1],
+        self._index_indicator = Lines(x=[[0, 0]] * len(markers), y=[[0, 1]] * len(markers),
                                       scales={'x': x_scale, 'y': linear_y_scale},
                                       colors=['lime'])
-
-        # link((self._mark, 'y'), (self, 'sample'), check_broken=False)
 
         self._figure.marks = [self._mark, self._index_indicator]
 
         self._observe_min_max_bins(None)
+        self._current_marker = None
 
         link((self, 'min'), (x_scale, 'min'))
         link((self, 'max'), (x_scale, 'max'))
@@ -104,19 +109,27 @@ class Histogram(widgets.HBox):
             return
 
         with self.hold_trait_notifications():
-            if self.adjust_x_scale:
-                self.min = float(min(change['new']))
-                self.max = float(max(change['new']))
+            values = change['new']
 
-            h = np.histogram(change['new'], bins=self.bins, range=(self.min, self.max))
+            if self.adjust_x_scale:
+                self.min = float(min(values))
+                self.max = float(max(values))
+
+            h = np.histogram(values, bins=self.bins, range=(self.min, self.max))
 
             self._mark.y = h[0]
 
     def _handle_event(self, event):
 
         if event['buttons']:
-            self._x = 1
-            self.lower = self.pixel_to_domain(event['offsetX'])
+            x = self.pixel_to_domain(event['offsetX'])
+
+            if event['event'] == 'mousedown':
+                i = np.argmin([np.abs(getattr(self, marker) - x) for marker in self._markers])
+                self._current_marker = self._markers[i]
+
+            if self._current_marker is not None:
+                setattr(self, self._current_marker, x)
 
     def pixel_to_domain(self, x):
         pixel_margin_width = self.figure.fig_margin['left'] + self.figure.fig_margin['right']
@@ -125,6 +138,11 @@ class Histogram(widgets.HBox):
         x = domain_width / pixel_width * (x - self.figure.fig_margin['left']) + self.x_scale.min
         return x
 
-    @observe('lower')
-    def _observe_frame_index(self, change):
-        self._index_indicator.x = [self.lower] * 2
+    def _observe_markers(self):
+        x = []
+        for marker in self._markers:
+            x += [[getattr(self, marker)] * 2]
+        self._index_indicator.x = x
+
+
+
