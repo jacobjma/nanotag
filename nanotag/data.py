@@ -62,13 +62,20 @@ class Text(widgets.Text):
 
 class NanotagData(VBox):
     root_directory = Unicode()
+    analysis_folder = Unicode()
     read_file = Unicode()
     write_file = Unicode()
-    identifier = Unicode(allow_none=True)
-    selected_data = Dict()
 
-    def __init__(self, tags, data=None, **kwargs):
+    analysis_path = Unicode()
+
+    identifier = Unicode(allow_none=True)
+    data = Dict()
+
+    def __init__(self, tags, **kwargs):
         self._root_directory_text = Text(description='Root directory')
+
+        self._analysis_folder_text = widgets.Text()
+        self._analysis_folder_button = widgets.Button(description='Analysis')
 
         self._read_file_text = widgets.Text()
         self._read_file_button = widgets.Button(description='Read data')
@@ -77,18 +84,17 @@ class NanotagData(VBox):
         self._write_file_button = widgets.Button(description='Write data')
 
         link((self, 'root_directory'), (self._root_directory_text, 'value'))
+        link((self, 'analysis_folder'), (self._analysis_folder_text, 'value'))
         link((self, 'write_file'), (self._write_file_text, 'value'))
         link((self, 'read_file'), (self._read_file_text, 'value'))
 
         self._read_file_button.on_click(lambda *args: self.read_data())
         self._write_file_button.on_click(lambda *args: self.write_data())
 
-        if data is None:
-            self._data = {}
-
         self._tags = tags
 
         super().__init__(children=[self._root_directory_text,
+                                   self._analysis_folder_text,
                                    widgets.HBox([self._read_file_button, self._read_file_text]),
                                    widgets.HBox([self._write_file_button, self._write_file_text]),
                                    ], **kwargs)
@@ -99,47 +105,59 @@ class NanotagData(VBox):
             if tags.empty:
                 continue
 
-            if not identifier in self._data.keys():
-                self._data[identifier] = {}
+            if not identifier in self.data.keys():
+                self.data[identifier] = {}
 
-            self._data[identifier][key] = tags.serialize()
+            self.data[identifier][key] = tags.serialize()
 
-    def send_tags(self, identifier):
+    def send_tags(self):
         for tags in self._tags.values():
-            tags.reset()
+           tags.reset()
 
-        if identifier in self._data.keys():
+        #if identifier in self.data.keys():
 
-            for key, data in self._data[identifier].items():
-                if not key in self._tags.keys():
-                    continue
+        d = self.data[list(self.data.keys())[0]]
 
-                self._tags[key].from_serialized(data)
+        for key, data in d.items():
+            if not key in self._tags.keys():
+                continue
 
-    @observe('identifier')
+            self._tags[key].from_serialized(data)
+
+    @observe('root_directory', 'analysis_folder', 'read_file')
+    def _new_path(self, *args):
+        self.analysis_path = os.path.join(self.root_directory, self.analysis_folder, self.read_file)
+
+    @observe('analysis_path')
     def _observe_identifier(self, change):
-        self.retrieve_tags(change['old'])
-        self.send_tags(change['new'])
+        self.read_data()
 
-        try:
-            self.selected_data = self._data[change['new']]
-        except KeyError:
-            pass
+        #self.retrieve_tags(change['old'])
+        #self.send_tags(change['new'])
+        #print(self.analysis_path)
+        #try:
+        #    self.selected_data = self.data[change['new']]
+        #except KeyError:
+        #    pass
 
     def write_data(self):
         self.retrieve_tags(self.identifier)
         with open(os.path.join(self.root_directory, self._write_file_text.value), 'w') as f:
-            json.dump(self._data, f)
+            json.dump(self.data, f)
 
     def read_data(self):
-        with open(os.path.join(self.root_directory, self._read_file_text.value), 'r') as f:
-            self._data = json.load(f)
-        self.send_tags(self.identifier)
-
         try:
-            self.selected_data = self._data[self.identifier]
-        except KeyError:
-            pass
+            with open(self.analysis_path, 'r') as f:
+                self.data = json.load(f)
+
+            self.send_tags()
+        except FileNotFoundError:
+            self.data = {}
+
+        # try:
+        #     self.selected_data = self._data[self.identifier]
+        # except KeyError:
+        #     pass
 
 
 class ImageFileCollection(VBox):
@@ -148,11 +166,12 @@ class ImageFileCollection(VBox):
 
     file_index = Int(0)
     paths = List()
-    path = Unicode(allow_none=True)
-    relative_path = Unicode(allow_none=True)
+    path = Unicode()
+    filename = Unicode()
+    relative_path = Unicode()
 
-    hashes = List()
-    hash = Unicode(allow_none=True)
+    # hashes = List()
+    # hash = Unicode(allow_none=True)
 
     images = Array(check_equal=False)
     num_frames = Int(0)
@@ -172,7 +191,7 @@ class ImageFileCollection(VBox):
 
         link((self, 'filter'), (self._filters_text, 'value'))
         link((self, 'paths'), (self._file_select, 'options'))
-        link((self._file_select, 'value'), (self, 'path'))
+        link((self, 'path'), (self._file_select, 'value'))
 
         self._find_button.on_click(lambda x: self.load_paths())
         self._previous_button.on_click(lambda *args: self.previous_file())
@@ -182,11 +201,15 @@ class ImageFileCollection(VBox):
 
     def load_paths(self):
         self.paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value), recursive=True)[:15]
-        self.hashes = [md5_digest(path) for path in self.paths]
+        # self.hashes = [md5_digest(path) for path in self.paths]
 
     @default('images')
     def _default_images(self):
         return np.zeros((0, 0, 0))
+
+    @default('paths')
+    def _default_paths(self, *args):
+        return ['']
 
     @observe('root_directory')
     def _observe_filter(self, *args):
@@ -215,11 +238,15 @@ class ImageFileCollection(VBox):
 
         assert len(images.shape) == 3
 
+        if (images.shape[-1] == 4) or (images.shape[-1] == 3):
+            images = np.rollaxis(images, -1)
+
         self.images = images
         self.num_frames = len(images)
 
         self.relative_path = os.path.relpath(self.path, self.root_directory)
-        self.hash = md5_digest(self.path)
+        # self.filename = os.path.split()
+        # self.hash = md5_digest(self.path)
 
         if self._image_series is not None:
             self._image_series.images = images
@@ -277,9 +304,9 @@ class Summary(VBox):
 
         super().__init__(children=[self._summary_text,
                                    widgets.VBox([
-                                                 widgets.HBox([write_current_button, current_file_text]),
-                                                 widgets.HBox([write_button, file_text])
-                                                 ])],
+                                       widgets.HBox([write_current_button, current_file_text]),
+                                       widgets.HBox([write_button, file_text])
+                                   ])],
                          **kwargs)
 
         def summary_transform(summary):
@@ -291,7 +318,7 @@ class Summary(VBox):
         link((self, 'current_write_file'), (current_file_text, 'value'))
 
     def update(self):
-       self.current_data, self.data = self.update_func()
+        self.current_data, self.data = self.update_func()
 
     def _write_current_data(self):
         with open(os.path.join(self.current_path, self.current_write_file), 'w') as f:
