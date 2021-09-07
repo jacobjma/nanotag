@@ -117,7 +117,6 @@ class NanotagData(VBox):
         #if identifier in self.data.keys():
 
         d = self.data[list(self.data.keys())[0]]
-
         for key, data in d.items():
             if not key in self._tags.keys():
                 continue
@@ -200,7 +199,9 @@ class ImageFileCollection(VBox):
         self._image_series = image_series
 
     def load_paths(self):
-        self.paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value), recursive=True)[:15]
+        paths = glob.glob(os.path.join(self.root_directory, self._filters_text.value), recursive=True)
+        paths = sorted(paths)
+        self.paths = paths
         # self.hashes = [md5_digest(path) for path in self.paths]
 
     @default('images')
@@ -280,8 +281,8 @@ class Summary(VBox):
     key = Unicode()
     update_func = Callable()
 
-    current_data = Dict()
-    data = Dict()
+    shown_data = Dict()
+    written_data = Dict()
 
     current_path = Unicode()
     path = Unicode()
@@ -312,7 +313,7 @@ class Summary(VBox):
         def summary_transform(summary):
             return json.dumps(summary, indent=4)
 
-        directional_link((self, 'current_data'), (self._summary_text, 'value'), transform=summary_transform)
+        directional_link((self, 'shown_data'), (self._summary_text, 'value'), transform=summary_transform)
 
         link((self, 'write_file'), (file_text, 'value'))
         link((self, 'current_write_file'), (current_file_text, 'value'))
@@ -327,3 +328,8 @@ class Summary(VBox):
     def _write_data(self):
         with open(os.path.join(self.path, self.write_file), 'w') as f:
             json.dump(self.data, f)
+
+
+#name
+#analyzed
+
