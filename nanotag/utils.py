@@ -1,5 +1,6 @@
 import contextlib
 import hashlib
+import os
 import warnings
 
 import matplotlib.cm
@@ -21,6 +22,12 @@ def md5_digest(file, buf_size=6553610):
             md5.update(data)
 
     return md5.hexdigest()
+
+
+def redirected_path(root, path, inserted_folder):
+    x = os.path.relpath(path, root)
+    x = os.path.join(root, inserted_folder, x)
+    return x
 
 
 def label_to_index_generator(labels):

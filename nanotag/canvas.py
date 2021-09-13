@@ -5,6 +5,7 @@ from traitlets import observe, Float, Unicode, Dict, List, Instance, Any
 from nanotag.tools import Tool, Action
 from nanotag.utils import Array, link
 from nanotag.image import ImageSeries
+import contextlib
 
 
 class ToolBox(widgets.HBox):
@@ -75,7 +76,7 @@ class ToolBox(widgets.HBox):
 
 
 class Canvas(widgets.HBox):
-    image = Instance(ImageSeries)
+    images = List()
     sampling = Float(1.)
     tags = List()
     tools = Dict()
@@ -173,24 +174,30 @@ class Canvas(widgets.HBox):
             self.y_scale.max = y_center + extent
 
     def reset(self):
-        if self.image is None:
+        if self.images is None:
             return
 
-        with self.image._mark.hold_sync(), self.x_scale.hold_sync(), self.y_scale.hold_sync():
-            x_limits = self.image.x_limits
-            y_limits = self.image.y_limits
+        with contextlib.ExitStack() as stack:
+
+            for mark in [image.mark for image in self.images] + [self.x_scale, self.y_scale]:
+                stack.enter_context(mark.hold_sync())
+
+            x_limits = self.images[0].x_limits
+            y_limits = self.images[0].y_limits
 
             self.x_scale.min = x_limits[0]
             self.x_scale.max = x_limits[1]
             self.y_scale.min = y_limits[0]
             self.y_scale.max = y_limits[1]
 
-    @observe('image')
+    @observe('images')
     def _observe_image(self, change):
-        change['new'].set_scales({'x': self.x_scale, 'y': self.y_scale})
-        self._image_mark = change['new'].mark
+        self._image_marks = []
+        for image in change['new']:
+            image.set_scales({'x': self.x_scale, 'y': self.y_scale})
+            self._image_marks.append(image.mark)
 
-        marks = [self._image_mark]
+        marks = self._image_marks
         if self._tag_marks is not None:
             marks = marks + self._tag_marks
 
@@ -204,8 +211,8 @@ class Canvas(widgets.HBox):
         self._tag_marks = [tags.mark for tags in change['new']]
         marks = self._tag_marks
 
-        if self._image_mark is not None:
-            marks = [self._image_mark] + marks
+        if self._image_marks is not None:
+            marks = self._image_marks + marks
 
         self.figure.marks = marks
 

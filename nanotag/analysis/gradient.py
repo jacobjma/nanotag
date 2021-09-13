@@ -106,7 +106,7 @@ class BoundPositions(AbstractConstraint):
         with torch.no_grad():
             vec = model.positions - self._centers
             d = torch.norm(vec, dim=1)
-            norm_vec = vec / d[:, None]
+            norm_vec = vec / (d[:, None] + 1e-6)
             model.positions[:] = self._centers + norm_vec * d[:, None].clamp(0, self._bound)
 
 
@@ -207,7 +207,7 @@ class ProbeSuperposition(nn.Module):
         array[self.image_label, (rows + 1) % shape[-2], (cols + 1) % shape[-1]] += d
 
         array = torch.fft.ifftn(torch.fft.fftn(array, dim=(-2, -1)) * self.probe_model(self.k), dim=(-2, -1))
-        #return array[:, self.margin:-self.margin, self.margin:-self.margin]
+
         if remove_margin:
             return array.real[:, self.margin:-self.margin, self.margin:-self.margin]
         else:
@@ -218,6 +218,10 @@ class ProbeSuperposition(nn.Module):
 
     def get_loss(self, target, weights=None):
         assert target.shape == self.shape
+
+        if not isinstance(target, torch.Tensor):
+            target = torch.tensor(target, device=self.positions.device)
+
         prediction = self._get_images()
         losses = ((prediction - target) ** 2)
         if weights is not None:

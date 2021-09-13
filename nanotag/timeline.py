@@ -85,6 +85,7 @@ class TimelineTags(HasTraits):
         self._mark.color = getattr(self, self.data_overlay)
 
     def reset(self):
+        self.t = []
         for data_field in self._data_fields:
             setattr(self, data_field, np.zeros((0,)))
 
@@ -236,3 +237,49 @@ class Timeline(widgets.VBox):
 
     def previous_frame(self):
         self.frame_index = self.frame_index - 1
+
+
+class TimelineTagEditor(widgets.HBox):
+
+    def __init__(self, tags, timeline):
+
+        def set_last_frame(*args):
+            if len(tags.t) > 0:
+                start = tags.t[0]
+            else:
+                start = 0
+
+            tags.t = list(range(start, timeline.frame_index + 1))
+
+        def set_first_frame(*args):
+            if len(tags.t) > 0:
+                end = tags.t[-1] + 1
+            else:
+                end = timeline.frame_index + 1
+            tags.t = list(range(timeline.frame_index, end))
+
+        def toggle_frame(*args):
+            if timeline.frame_index in list(tags.t):
+                tags.t = np.delete(tags.t, np.where(tags.t == timeline.frame_index)[0])
+
+            else:
+                tags.t = np.sort(np.concatenate((tags.t, [timeline.frame_index]))).astype(int)
+
+        def toggle_all(*args):
+            if len(tags.t) > 0:
+                tags.t = []
+            else:
+                tags.t = range(0, timeline.num_frames)
+
+        layout = widgets.Layout(width='100px')
+
+        last_frame_button = widgets.Button(description='Last frame', layout=layout)
+        last_frame_button.on_click(set_last_frame)
+        first_frame_button = widgets.Button(description='First frame', layout=layout)
+        first_frame_button.on_click(set_first_frame)
+        toggle_frame_button = widgets.Button(description='Toggle frame', layout=layout)
+        toggle_frame_button.on_click(toggle_frame)
+        toggle_all_button = widgets.Button(description='Toggle all', layout=layout)
+        toggle_all_button.on_click(toggle_all)
+
+        super().__init__(children=[first_frame_button, toggle_frame_button, last_frame_button, toggle_all_button])
