@@ -157,6 +157,15 @@ class PointTags(VBox):
                     pass
 
 
+class GraphTags(VBox):
+
+    def __init__(self):
+
+
+        super().__init__()
+
+
+
 class PointTagSeries(widgets.VBox):
     frame_index = Int(0)
     series = Dict()

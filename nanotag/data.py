@@ -244,7 +244,9 @@ class ImageFileCollection(VBox):
         # self.filename = os.path.split()
         # if self._calculate_hash:
         metadata = read_metadata(self.path)
-        #self.metadata = json.loads(metadata['ImageDescription'][metadata['ImageDescription'].index('{'):])
+        self.metadata = metadata
+
+        #self.metadata = json.loads(metadata)
 
         self.hash = md5_digest(self.path)
         # self.hash = hash(json.dumps(metadata))
