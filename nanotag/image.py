@@ -3,7 +3,7 @@ import numpy as np
 from bqplot import ColorScale, LinearScale
 from bqplot_image_gl import ImageGL
 from scipy.ndimage import gaussian_filter
-from traitlets import Int, observe, default, Float, Unicode, List, Bool
+from traitlets import Int, observe, default, Float, Unicode, List, Bool, Tuple, Dict
 from traittypes import Array
 
 from nanotag.layout import VBox
@@ -28,11 +28,13 @@ class ImageSeries(VBox):
     frame_index = Int(0)
     sampling = Float(1.)
     color_scheme = Unicode('grey')
+    shifts = Dict()
 
     filters = List()
     images = Array(check_equal=False)
     image = Array(check_equal=False)
     visible = Bool(True)
+    autoadjust_scales = Bool(True)
 
     def __init__(self, **kwargs):
 
@@ -69,12 +71,19 @@ class ImageSeries(VBox):
         return self.mark.scales['y']
 
     @property
+    def shift(self):
+        try:
+            return self.shifts[str(self.frame_index)]
+        except KeyError:
+            return [0., 0.]
+
+    @property
     def x_limits(self):
-        return [-.5 * self.sampling, (self.image.shape[0] - .5) * self.sampling]
+        return [-.5 * self.sampling + self.shift[0], (self.image.shape[0] - .5) * self.sampling + self.shift[0]]
 
     @property
     def y_limits(self):
-        return [-.5 * self.sampling, (self.image.shape[1] - .5) * self.sampling]
+        return [-.5 * self.sampling + self.shift[1], (self.image.shape[1] - .5) * self.sampling + self.shift[1]]
 
     def set_scales(self, scales):
         scales['image'] = self.mark.scales['image']
@@ -117,14 +126,24 @@ class ImageSeries(VBox):
         for filt in change['new']:
             filt.observe(lambda *args: self._update_image())
 
+    @observe('shift')
+    def _observe_shift(self, *args):
+        with self.mark.hold_sync():
+            self.mark.x = self.x_limits
+            self.mark.y = self.y_limits
+
     @observe('image')
     def _observe_image(self, change):
         if self.image.size == 0:
             return
 
+        self.mark.scales['image'].min = float(self.image.min())
+        self.mark.scales['image'].max = float(self.image.max())
+
+        if not self.autoadjust_scales:
+            return
+
         with self.mark.hold_sync():
-            self.mark.scales['image'].min = float(self.image.min())
-            self.mark.scales['image'].max = float(self.image.max())
             self.mark.x = self.x_limits
             self.mark.y = self.y_limits
 
@@ -139,6 +158,9 @@ class ImageSeries(VBox):
         self._update_image()
         # else:
         #    self.frame_index = 0
+
+        if not self.autoadjust_scales:
+            return
 
         self.x_scale.min = self.x_limits[0]
         self.x_scale.max = self.x_limits[1]

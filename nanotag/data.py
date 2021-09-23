@@ -5,7 +5,7 @@ import os
 import ipywidgets as widgets
 import numpy as np
 from skimage.io import imread
-from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool, validate, Callable
+from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool, validate, Callable, Any
 from traittypes import Array
 
 from nanotag.layout import VBox
@@ -70,7 +70,7 @@ class NanotagData(VBox):
     selected_data = Dict()
     analysis_path = Unicode()
 
-    def __init__(self, tags, **kwargs):
+    def __init__(self, tags, data_fields=None, **kwargs):
         self._root_directory_text = Text(description='Root directory')
 
         self._read_file_text = widgets.Text()
@@ -87,6 +87,11 @@ class NanotagData(VBox):
         self._write_file_button.on_click(lambda *args: self.write_data())
 
         self._tags = tags
+
+        if data_fields is not None:
+            self.add_traits(**{data_field: Any() for data_field in data_fields})
+
+        self._data_fields = data_fields
 
         super().__init__(children=[self._root_directory_text,
                                    widgets.HBox([self._read_file_button, self._read_file_text]),
@@ -121,7 +126,7 @@ class NanotagData(VBox):
     def _observe_identifier(self, change):
         self.read_data()
 
-        #self.retrieve_tags(change['old'])
+        # self.retrieve_tags(change['old'])
         self.send_tags()
 
         # try:
@@ -138,6 +143,13 @@ class NanotagData(VBox):
         try:
             with open(self.analysis_path, 'r') as f:
                 self.data = json.load(f)
+
+            try:
+                if self._data_fields is not None:
+                    for data_field in self._data_fields:
+                        setattr(self, data_field, self.data[data_field])
+            except KeyError:
+                pass
 
         except FileNotFoundError:
             self.data = {}
@@ -224,10 +236,14 @@ class ImageFileCollection(VBox):
         if self.path is None:
             return
 
-        try:
-            images = imread(self.path)
-        except ValueError:
-            images = np.zeros((0, 0, 0))
+        if os.path.splitext(self.path)[-1] == '.npy':
+            images = np.load(self.path)
+        else:
+            try:
+                images = imread(self.path)
+                self.metadata = read_metadata(self.path)
+            except ValueError:
+                images = np.zeros((0, 0, 0))
 
         if len(images.shape) == 2:
             images = images[None]
@@ -243,10 +259,8 @@ class ImageFileCollection(VBox):
         self.relative_path = os.path.relpath(self.path, self.root_directory)
         # self.filename = os.path.split()
         # if self._calculate_hash:
-        metadata = read_metadata(self.path)
-        self.metadata = metadata
 
-        #self.metadata = json.loads(metadata)
+        # self.metadata = json.loads(metadata)
 
         self.hash = md5_digest(self.path)
         # self.hash = hash(json.dumps(metadata))
@@ -293,7 +307,7 @@ class Summary(VBox):
     write_file = Unicode(allow_none=True)
 
     def __init__(self, **kwargs):
-        #write_current_button = widgets.Button(description='Write current')
+        # write_current_button = widgets.Button(description='Write current')
         write_button = widgets.Button(description='Write')
 
         current_file_text = widgets.Text()
@@ -302,12 +316,12 @@ class Summary(VBox):
         self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='500px'))
 
         # update_button.on_click(lambda *args: self._update())
-        #write_current_button.on_click(lambda *args: self._write_current_data())
+        # write_current_button.on_click(lambda *args: self._write_current_data())
         write_button.on_click(lambda *args: self._write_data())
 
         super().__init__(children=[self._summary_text,
                                    widgets.VBox([
-                                       #widgets.HBox([write_current_button, current_file_text]),
+                                       # widgets.HBox([write_current_button, current_file_text]),
                                        widgets.HBox([write_button, file_text])
                                    ])],
                          **kwargs)
@@ -323,7 +337,7 @@ class Summary(VBox):
     def update(self):
         self.current_data, self.data = self.update_func()
 
-    #def _write_current_data(self):
+    # def _write_current_data(self):
     #    with open(os.path.join(self.current_path, self.current_write_file), 'w') as f:
     #        json.dump(self.current_data, f)
 
