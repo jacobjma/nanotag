@@ -343,4 +343,4 @@ class Summary(VBox):
 
     def _write_data(self):
         with open(os.path.join(self.path, self.write_file), 'w') as f:
-            json.dump(self.current_data, f)
+            json.dump(self.data, f)
