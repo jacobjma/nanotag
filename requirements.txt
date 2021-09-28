@@ -1,8 +1,9 @@
+numba
+networkx
 bqplot
 bqplot-image-gl
 matplotlib
 scipy
-numpy
 traitlets
 traittypes
 ipywidgets

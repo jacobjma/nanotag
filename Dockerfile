@@ -5,6 +5,7 @@ WORKDIR /src
 
 COPY . /src
 
+
 RUN pip3 install --upgrade setuptools
 RUN pip3 install -r requirements.txt
 
