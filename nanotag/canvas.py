@@ -149,15 +149,15 @@ class Canvas(widgets.HBox):
         pixel_margin_width = self.figure.fig_margin['left'] + self.figure.fig_margin['right']
         pixel_margin_height = self.figure.fig_margin['top'] + self.figure.fig_margin['bottom']
 
-        pixel_width = int(self.figure.layout.width[:-2]) - pixel_margin_width
-        pixel_height = int(self.figure.layout.height[:-2]) - pixel_margin_height
-
-        domain_width = self.x_scale.max - self.x_scale.min
-        domain_height = self.y_scale.max - self.y_scale.min
-
-        x = domain_width / pixel_width * (x - self.figure.fig_margin['left']) + self.x_scale.min
-        y = domain_height / pixel_height * (y - self.figure.fig_margin['top']) + self.y_scale.min
-        return x, y
+        # pixel_width = int(self.figure.layout.width[:-2]) - pixel_margin_width
+        # pixel_height = int(self.figure.layout.height[:-2]) - pixel_margin_height
+        #
+        # domain_width = self.x_scale.max - self.x_scale.min
+        # domain_height = self.y_scale.max - self.y_scale.min
+        #
+        # x = domain_width / pixel_width * (x - self.figure.fig_margin['left']) + self.x_scale.min
+        # y = domain_height / pixel_height * (y - self.figure.fig_margin['top']) + self.y_scale.min
+        # return x, y
 
     def adjust_equal_axes(self):
         if None in (self.x_scale.min, self.x_scale.min, self.y_scale.min, self.y_scale.max):

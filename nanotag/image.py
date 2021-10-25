@@ -3,10 +3,11 @@ import numpy as np
 from bqplot import ColorScale, LinearScale
 from bqplot_image_gl import ImageGL
 from scipy.ndimage import gaussian_filter
-from traitlets import Int, observe, default, Float, Unicode, List, Bool, Tuple, Dict
+from traitlets import Int, observe, default, Float, Unicode, List, Bool, Dict, link
 from traittypes import Array
 
 from nanotag.layout import VBox
+from nanotag.timeline import Timeline
 from nanotag.utils import link
 
 
@@ -58,6 +59,12 @@ class ImageSeries(VBox):
 
         super().__init__(children=[color_scheme_dropdown, visible_checkbox], **kwargs)
 
+    def build_timeline(self):
+        timeline = Timeline()
+        link((timeline, 'frame_index'), (self, 'frame_index'))
+        link((self, 'num_frames'), (timeline, 'num_frames'))
+        return timeline
+
     @property
     def mark(self):
         return self._mark
@@ -73,7 +80,7 @@ class ImageSeries(VBox):
     @property
     def shift(self):
         try:
-            return self.shifts[str(self.frame_index)]
+            return self.shifts[self.frame_index]
         except KeyError:
             return [0., 0.]
 

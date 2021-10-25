@@ -136,7 +136,8 @@ class Timeline(widgets.VBox):
         x_axis = Axis(scale=scales['x'])
         y_axis = Axis(scale=scales['y'], orientation='vertical', grid_lines='none')
 
-        fig_margin = fig_margin or {'top': 0, 'bottom': 30, 'left': 60, 'right': 0}
+
+        fig_margin = fig_margin or {'top': 0, 'bottom': 30, 'left': 5, 'right': 0}
 
         self._figure = Figure(scales=scales, axes=[x_axis, y_axis], fig_margin=fig_margin)
 

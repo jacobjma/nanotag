@@ -5,6 +5,7 @@ import os
 import ipywidgets as widgets
 import numpy as np
 from skimage.io import imread
+from skimage.transform import downscale_local_mean
 from traitlets import List, Unicode, Int, observe, Dict, default, directional_link, Bool, validate, Callable, Any
 from traittypes import Array
 
@@ -178,6 +179,7 @@ class ImageFileCollection(VBox):
     hashes = List()
     hash = Unicode()
     metadata = Dict()
+    binning = Int(1)
 
     images = Array(check_equal=False)
     num_frames = Int(0)
@@ -249,6 +251,10 @@ class ImageFileCollection(VBox):
             images = images[None]
 
         assert len(images.shape) == 3
+
+        if self.binning > 1:
+
+            images = downscale_local_mean(images, (len(images),) + (self.binning,) * 2)
 
         if (images.shape[-1] == 4) or (images.shape[-1] == 3):
             images = np.rollaxis(images, -1)
