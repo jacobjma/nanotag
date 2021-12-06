@@ -84,8 +84,9 @@ class NanotagData(VBox):
         link((self, 'write_file'), (self._write_file_text, 'value'))
         link((self, 'read_file'), (self._read_file_text, 'value'))
 
-        self._read_file_button.on_click(lambda *args: self.read_data())
-        self._write_file_button.on_click(lambda *args: self.write_data())
+
+        self._read_file_button.on_click(self.read_data)
+        self._write_file_button.on_click(self.write_data)
 
         self._tags = tags
 
@@ -135,25 +136,37 @@ class NanotagData(VBox):
         # except KeyError:
         #    pass
 
-    def write_data(self):
-        self.retrieve_tags(self.identifier)
-        with open(os.path.join(self.root_directory, self._write_file_text.value), 'w') as f:
-            json.dump(self.data, f)
+    def write_data(self, *args):
+        data = {}
+        for key, tags in self._tags.items():
+            data[key] = tags.serialize()
 
-    def read_data(self):
+        #self.retrieve_tags(self.identifier)
+
+        os.makedirs(os.path.split(self._write_file_text.value)[0], exist_ok=True)
+
+        with open(os.path.join(self._write_file_text.value), 'w') as f:
+            json.dump(data, f)
+
+    def read_data(self, *args):
+
         try:
             with open(self.analysis_path, 'r') as f:
                 self.data = json.load(f)
-
-            try:
-                if self._data_fields is not None:
-                    for data_field in self._data_fields:
-                        setattr(self, data_field, self.data[data_field])
-            except KeyError:
-                pass
-
         except FileNotFoundError:
-            self.data = {}
+           self.data = {}
+
+        try:
+            if self._data_fields is not None:
+                for data_field in self._data_fields:
+                    setattr(self, data_field, self.data[data_field])
+        except KeyError:
+            pass
+
+        self.send_tags()
+
+        #except FileNotFoundError:
+        #    self.data = {}
 
 
 def read_metadata(f):
@@ -284,6 +297,10 @@ class ImageFileCollection(VBox):
     def num_files(self):
         return len(self._file_select.options)
 
+    @observe('file_index')
+    def _observe_file_index(self, *args):
+        self._file_select.value = self._file_select.options[self.file_index]
+
     def next_file(self):
         i = self._current_file_index()
         if i is None:
@@ -319,7 +336,7 @@ class Summary(VBox):
         current_file_text = widgets.Text()
         file_text = widgets.Text()
 
-        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='500px'))
+        self._summary_text = widgets.Textarea(layout=widgets.Layout(width='452px', height='800px'))
 
         # update_button.on_click(lambda *args: self._update())
         # write_current_button.on_click(lambda *args: self._write_current_data())
@@ -333,6 +350,7 @@ class Summary(VBox):
                          **kwargs)
 
         def summary_transform(summary):
+
             return json.dumps(summary, indent=4)
 
         directional_link((self, 'current_data'), (self._summary_text, 'value'), transform=summary_transform)
@@ -348,5 +366,7 @@ class Summary(VBox):
     #        json.dump(self.current_data, f)
 
     def _write_data(self):
-        with open(os.path.join(self.path, self.write_file), 'w') as f:
-            json.dump(self.data, f)
+        os.makedirs(os.path.split(self.write_file)[0], exist_ok=True)
+
+        with open(os.path.join(self.write_file), 'w') as f:
+            json.dump(self.current_data, f)

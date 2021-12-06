@@ -9,6 +9,7 @@ from traittypes import Array
 from nanotag.layout import VBox
 from nanotag.timeline import Timeline
 from nanotag.utils import link
+from skimage.draw import polygon2mask
 
 
 class GaussianFilterSlider(VBox):
@@ -34,8 +35,12 @@ class ImageSeries(VBox):
     filters = List()
     images = Array(check_equal=False)
     image = Array(check_equal=False)
+
     visible = Bool(True)
     autoadjust_scales = Bool(True)
+
+    vmin = Float(0.)
+    vmax = Float(1.)
 
     def __init__(self, **kwargs):
 
@@ -57,7 +62,32 @@ class ImageSeries(VBox):
         link((self, 'color_scheme'), (color_scheme_dropdown, 'value'))
         link((self, 'visible'), (self._mark, 'visible'))
 
-        super().__init__(children=[color_scheme_dropdown, visible_checkbox], **kwargs)
+        self._range_slider = widgets.FloatRangeSlider(description='Range slider',
+                                                      min=0.,
+                                                      max=1.,
+                                                      step=.01,
+                                                      value=[0, 1.])
+
+        def range_slider_changed(change):
+            self.vmin = change['new'][0]
+            self.vmax = change['new'][1]
+
+        self._range_slider.observe(range_slider_changed, 'value')
+
+        super().__init__(children=[color_scheme_dropdown, visible_checkbox, self._range_slider], **kwargs)
+
+    def autoadjust_range(self, mask=None):
+        image_mask = np.zeros_like(self.image, dtype=bool)
+
+        for polygon in mask:
+            if len(polygon) > 0:
+                image_mask += polygon2mask(self.image.shape, polygon[:, ::-1])
+
+        image_mask = image_mask == 0
+        min_value, ptp_value = self.image.min(), self.image.ptp()
+        masked_min_value, masked_ptp_value = self.image[image_mask].min(), self.image[image_mask].ptp()
+        self.vmin = float((masked_min_value - min_value) / ptp_value)
+        self.vmax = float((masked_min_value + masked_ptp_value - min_value) / ptp_value)
 
     def build_timeline(self):
         timeline = Timeline()
@@ -139,13 +169,22 @@ class ImageSeries(VBox):
             self.mark.x = self.x_limits
             self.mark.y = self.y_limits
 
+    @observe('vmin', 'vmax')
+    def _set_color_scale(self, *args):
+        self._range_slider.value = [self.vmin, self.vmax]
+
+        min_value = float(self.image.min())
+        ptp_value = float(self.image.ptp())
+
+        self.mark.scales['image'].min = min_value + self.vmin * ptp_value
+        self.mark.scales['image'].max = min_value + self.vmax * ptp_value
+
     @observe('image')
     def _observe_image(self, change):
         if self.image.size == 0:
             return
 
-        self.mark.scales['image'].min = float(self.image.min())
-        self.mark.scales['image'].max = float(self.image.max())
+        self._set_color_scale()
 
         if not self.autoadjust_scales:
             return

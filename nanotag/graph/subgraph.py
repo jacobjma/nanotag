@@ -1,4 +1,4 @@
-def subgraph_adjacency(node_indices, adjacency, relabel=True):
+def subgraph_adjacency(node_indices, adjacency, relabel=False):
     if relabel:
         backward = {i: node_index for i, node_index in enumerate(node_indices)}
         forward = {value: key for key, value in backward.items()}

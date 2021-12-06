@@ -60,3 +60,33 @@ def rmsd_qcp(src, dst):
 
     rmsd[valid] = np.sqrt(np.sum((np.matmul(src, U) - dst) ** 2, axis=(1, 2)) / src.shape[1])
     return rmsd
+
+
+def batch_rmsd_qcp(src, dst):
+    M = np.einsum('aji,bjk', src, dst)
+
+    xx = M[..., 0, 0]
+    xy = M[..., 0, 1]
+    yx = M[..., 1, 0]
+    yy = M[..., 1, 1]
+
+    xx_yy = xx + yy
+    xy_yx = xy - yx
+    xy_yx_2 = xy_yx ** 2
+
+    xx_yy_u = xx_yy + np.sqrt(xy_yx_2 + xx_yy ** 2)
+    xx_yy_u_2 = xx_yy_u ** 2
+
+    denom = xx_yy_u_2 + xy_yx_2
+
+    Uxx = (xx_yy_u_2 - xy_yx_2) / denom
+    Uxy = 2 * xy_yx * xx_yy_u / denom
+
+    U = np.zeros(M.shape[:-2] + (2, 2))
+    U[..., 0, 0] = Uxx
+    U[..., 1, 1] = Uxx
+    U[..., 1, 0] = -Uxy
+    U[..., 0, 1] = Uxy
+
+    rmsd = np.sqrt(np.sum((np.matmul(src[:, None], U) - dst[None]) ** 2, axis=(-1, -2)) / src.shape[-1])
+    return rmsd

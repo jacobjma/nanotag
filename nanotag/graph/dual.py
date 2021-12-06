@@ -43,3 +43,14 @@ def faces_to_dual_matrix(faces):
     row_ind = [edge[0] for edge in dual_edges]
     col_ind = [edge[1] for edge in dual_edges]
     return csr_matrix((np.ones(len(dual_edges), dtype=np.bool), (row_ind, col_ind)), (len(faces),) * 2, dtype=np.bool)
+
+
+def dual_path(path, graph):
+    dual_path = []
+    for i, j in zip(np.roll(path, -1), path):
+        dual_path.append(graph.quad_edge[(i, j)][0])
+    dual_path.append(dual_path[0])
+
+
+    dual_path = [dual_path[i] for i in range(len(dual_path)) if dual_path[i] != dual_path[i - 1]]
+    return dual_path

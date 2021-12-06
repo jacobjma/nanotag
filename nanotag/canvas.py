@@ -1,11 +1,10 @@
+import contextlib
+
 import ipywidgets as widgets
 from bqplot import Figure, Axis, LinearScale
-from traitlets import observe, Float, Unicode, Dict, List, Instance, Any
+from traitlets import observe, Float, Unicode, Dict, List
 
-from nanotag.tools import Tool, Action
-from nanotag.utils import Array, link
-from nanotag.image import ImageSeries
-import contextlib
+from nanotag.utils import link
 
 
 class ToolBox(widgets.HBox):
@@ -49,11 +48,11 @@ class ToolBox(widgets.HBox):
 
         self._widgets = {}
         for key, value in change['new'].items():
-            if isinstance(value, Tool):
+            if hasattr(value, 'deactivate'):
                 widget = widgets.ToggleButton(value=False, description=key)
                 widget.observe(toggle_tool, 'value')
 
-            elif isinstance(value, Action):
+            elif hasattr(value, 'activate'):
                 widget = widgets.Button(description=key)
                 widget.on_click(activate_action)
 
@@ -84,7 +83,7 @@ class Canvas(widgets.HBox):
 
     def __init__(self, fig_margin=None, width=450, height=450, **kwargs):
         x_scale = LinearScale(allow_padding=False)
-        y_scale = LinearScale(allow_padding=False, reverse=True)
+        y_scale = LinearScale(allow_padding=False)
 
         scales = {'x': x_scale, 'y': y_scale}
 
@@ -149,15 +148,16 @@ class Canvas(widgets.HBox):
         pixel_margin_width = self.figure.fig_margin['left'] + self.figure.fig_margin['right']
         pixel_margin_height = self.figure.fig_margin['top'] + self.figure.fig_margin['bottom']
 
-        # pixel_width = int(self.figure.layout.width[:-2]) - pixel_margin_width
-        # pixel_height = int(self.figure.layout.height[:-2]) - pixel_margin_height
-        #
-        # domain_width = self.x_scale.max - self.x_scale.min
-        # domain_height = self.y_scale.max - self.y_scale.min
-        #
-        # x = domain_width / pixel_width * (x - self.figure.fig_margin['left']) + self.x_scale.min
-        # y = domain_height / pixel_height * (y - self.figure.fig_margin['top']) + self.y_scale.min
-        # return x, y
+        pixel_width = int(self.figure.layout.width[:-2]) - pixel_margin_width
+        pixel_height = int(self.figure.layout.height[:-2]) - pixel_margin_height
+
+        domain_width = self.x_scale.max - self.x_scale.min
+        domain_height = self.y_scale.max - self.y_scale.min
+
+        x = domain_width / pixel_width * (x - self.figure.fig_margin['left']) + self.x_scale.min
+        y = domain_height / pixel_height * (y - self.figure.fig_margin['top']) + self.y_scale.min
+        y = - y + self.y_scale.max + self.y_scale.min
+        return x, y
 
     def adjust_equal_axes(self):
         if None in (self.x_scale.min, self.x_scale.min, self.y_scale.min, self.y_scale.max):
@@ -208,11 +208,14 @@ class Canvas(widgets.HBox):
         for tags in change['new']:
             tags.set_scales({'x': self.x_scale, 'y': self.y_scale})
 
-        self._tag_marks = [tags.mark for tags in change['new']]
-        marks = self._tag_marks
+        self._tags_marks = []
+        for tags in change['new']:
+            self._tags_marks += tags.marks
 
         if self._image_marks is not None:
-            marks = self._image_marks + marks
+            marks = self._image_marks + self._tags_marks
+        else:
+            marks = self._tags_marks
 
         self.figure.marks = marks
 
