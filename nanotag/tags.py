@@ -15,7 +15,7 @@ class PointTags(VBox):
     x = Array(np.zeros((0,)), check_equal=False)
     y = Array(np.zeros((0,)), check_equal=False)
 
-    default_size = Int(20)
+    default_size = Int(50)
     data_overlay = Unicode()
     color_scheme = Unicode('plasma')
 
@@ -465,9 +465,9 @@ class PointTagSeries(widgets.VBox):
     series = Dict()
     color_scheme = Unicode('plasma')
 
-    def __init__(self, data_fields=None, enable_move=True, **kwargs):
+    def __init__(self, data_overlays=None, enable_move=True, **kwargs):
 
-        self._point_tags = PointTags(data_fields=data_fields, enable_move=enable_move)
+        self._point_tags = PointTags(data_overlays=data_overlays, enable_move=enable_move)
 
         super().__init__(children=[self._point_tags], **kwargs)
 
@@ -488,6 +488,10 @@ class PointTagSeries(widgets.VBox):
     @property
     def y(self):
         return self.point_tags.y
+
+    @property
+    def marks(self):
+        return self._point_tags.marks
 
     @property
     def empty(self):
